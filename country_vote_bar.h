@@ -1,7 +1,7 @@
 #ifndef COUNTRY_VOTE_BAR
 #define COUNTRY_VOTE_BAR
 
-#include "result_types.h"
+#include "lib/election_results.h"
 #include <map>
 #include <string>
 
