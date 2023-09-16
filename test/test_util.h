@@ -26,7 +26,7 @@ void print_si_maps_and_fail(const std::map<std::string, int> &expected,
 }
 
 void assert_eq_si_maps(const std::map<std::string, int> &expected,
-                     const std::map<std::string, int> &actual) {
+                       const std::map<std::string, int> &actual) {
   if (actual.size() != expected.size()) {
     std::cout << "FAILED: result map size (" << actual.size() 
               << ") does not match expected (" << expected.size() << ")!"
@@ -45,6 +45,48 @@ void assert_eq_si_maps(const std::map<std::string, int> &expected,
                 << actual.find(key)->second << ") does not match expectation("
                 << V.second << ")!" << std::endl;
       print_si_maps_and_fail(expected, actual);
+    }
+  }
+}
+
+template<typename T>
+void print_vector(const std::vector<T> &V) {
+  std::cout << "[";
+  bool first = true;
+  for (auto &v : V) {
+    if (!first) std::cout << ", ";
+    first = false;
+    std::cout << v;
+  }
+  std::cout << "]" << std::endl;
+}
+
+template<typename T>
+void print_vectors_and_fail(const std::vector<T> &expected,
+                            const std::vector<T> &actual) {
+  std::cout << "Expected vector: ";
+  print_vector(expected);
+  std::cout << "Actual vector: ";
+  print_vector(actual);
+  std::cout.flush();
+  assert(false);
+}
+
+template<typename T>
+void assert_vector_eq(const std::vector<T> &expected,
+                      const std::vector<T> &actual) {
+  if (actual.size() != expected.size()) {
+    std::cout << "FAILED: result vector size (" << actual.size() 
+              << ") does not match expected (" << expected.size() << ")!"
+              << std::endl;
+    print_vectors_and_fail(expected, actual);
+  }
+  for (int i = 0; i < (int) expected.size(); ++i) {
+    if (actual[i] != expected[i]) {
+      std::cout << "FAILED: at position " << i << ", expected vector is "
+                << expected[i] << ", while actual is " << actual[i]
+                << std::endl;
+      print_vectors_and_fail(expected, actual);
     }
   }
 }

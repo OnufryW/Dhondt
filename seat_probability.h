@@ -6,7 +6,7 @@
 #include <vector>
 #include <random>
 #include <cmath>
-#include "dhondt.h"
+#include "lib/dhondt.h"
 
 namespace {
 
