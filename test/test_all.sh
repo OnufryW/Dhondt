@@ -5,6 +5,7 @@ for testfile in ./*.cpp; do
     echo "Compiling $testfile failed!"
     exit 1
   fi
+  echo ""
   echo "Testing $testfile"
   ./test_to_run
   if [ $? -ne 0 ]; then

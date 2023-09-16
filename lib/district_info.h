@@ -7,8 +7,6 @@
 // Encodes the information about a particular district (independent from
 // the results of voting - this is stuff that is known about the district
 // prior to the election).
-// The exception is the "voters" field, which is how many people actually
-// voted in that district. Might consider moving it?
 class DistrictInfo {
  public:
   DistrictInfo() {}
@@ -20,7 +18,7 @@ class DistrictInfo {
   std::string code;  // The code (a number from 1 to 41) of the district.
   int seats;  // The number of seats to be won in this district
   int citizens;  // The number of citizens of this distrcit acc. to PKW
-  int voters;  // The number of people who voted in that district.
+  int voters;  // The number of citizens eligible to vote acc. to PKW
   std::string name;  // The name of the district (usually, a city name).
 };
 

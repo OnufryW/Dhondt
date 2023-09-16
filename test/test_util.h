@@ -25,7 +25,7 @@ void print_si_maps_and_fail(const std::map<std::string, int> &expected,
   assert(false);
 }
 
-void compare_si_maps(const std::map<std::string, int> &expected,
+void assert_eq_si_maps(const std::map<std::string, int> &expected,
                      const std::map<std::string, int> &actual) {
   if (actual.size() != expected.size()) {
     std::cout << "FAILED: result map size (" << actual.size() 
@@ -46,6 +46,15 @@ void compare_si_maps(const std::map<std::string, int> &expected,
                 << V.second << ")!" << std::endl;
       print_si_maps_and_fail(expected, actual);
     }
+  }
+}
+
+template<typename T>
+void assert_eq(const T &expected, const T &actual, const std::string &desc) {
+  if (expected != actual) {
+    std::cout << "FAILED: Result " << desc << " equal to " << expected
+              << ", does not match expected " << expected << std::endl;
+    assert(false);
   }
 }
 
