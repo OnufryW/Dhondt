@@ -52,8 +52,9 @@ void assert_eq_si_maps(const std::map<std::string, int> &expected,
 template<typename T>
 void assert_eq(const T &expected, const T &actual, const std::string &desc) {
   if (expected != actual) {
-    std::cout << "FAILED: Result " << desc << " equal to " << expected
-              << ", does not match expected " << expected << std::endl;
+    std::cout << "FAILED: Obtained " << desc << " equal to '" << actual
+              << "', does not match expected '" << expected << "'"
+              << std::endl;
     assert(false);
   }
 }

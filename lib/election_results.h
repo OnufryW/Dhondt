@@ -22,7 +22,7 @@ class DistrictResults {
   std::map<std::string, int> VoteCountByParty() { return vcbp; }
   // The ID of the district (e.g., "19").
   std::string DistrictId() { return id; }
-  // The name of the district (e.g., "Warszawa").
+  // The name of the district (e.g., "Okręg Wyborczy Nr 19").
   std::string DistrictName() { return name; }
   // The total number of votes cast (should be equal to the sum of all the
   // values in the vcbp map).
