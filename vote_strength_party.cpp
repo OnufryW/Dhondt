@@ -1,5 +1,5 @@
 #include "parse_election_results.h"
-#include "parse_district_info.h"
+#include "lib/parse_district_info.h"
 #include <iostream>
 #include "seat_probability.h"
 using std::cout;
