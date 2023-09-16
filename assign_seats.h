@@ -1,9 +1,8 @@
-#ifndef ELECTION_RESULTS
-#define ELECTION_RESULTS
-
+#ifndef ASSIGN_SEATS
+#define ASSIGN_SEATS
 #include "parse_district_info.h"
 #include "parse_election_results.h"
-#include "result_types.h"
+#include "lib/election_results.h"
 #include "country_vote_bar.h"
 #include "dhondt.h"
 #include <string>
@@ -31,4 +30,4 @@ std::map<std::string, int> GetElectionResults(
   return results;
 }
 
-#endif // ELECTION_RESULTS
+#endif // ASSIGN_SEATS

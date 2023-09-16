@@ -1,6 +1,6 @@
 #include "parse_election_results.h"
 #include <iostream>
-#include "election_results.h"
+#include "assign_seats.h"
 using std::cout;
 
 int main() {

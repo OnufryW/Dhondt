@@ -3,8 +3,8 @@
 
 #include <string>
 #include <map>
-#include "parse_csv.h"
-#include "result_types.h"
+#include "lib/parse_csv.h"
+#include "lib/district_info.h"
 
 std::map<std::string, DistrictInfo> DistrictInfoFromFile2019(
     const std::string &filename) {

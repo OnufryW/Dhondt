@@ -3,8 +3,8 @@
 
 #include <string>
 #include <map>
-#include "parse_csv.h"
-#include "result_types.h"
+#include "lib/parse_csv.h"
+#include "lib/election_results.h"
 
 std::vector<bool> valid_startpoints(const std::vector<std::string> &votes) {
   std::vector<bool> res(votes.size());
