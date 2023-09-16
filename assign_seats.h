@@ -2,7 +2,7 @@
 #define ASSIGN_SEATS
 #include "lib/election_results.h"
 #include "country_vote_bar.h"
-#include "dhondt.h"
+#include "lib/dhondt.h"
 #include <string>
 #include <map>
 #include <vector>
@@ -19,7 +19,7 @@ std::map<std::string, int> GetElectionResults(
     std::string district = D.first;
     assert(district_seats.find(district) != district_seats.end());
     auto filtered_votes = FilterParties(D.second.VoteCountByParty(), bar);
-    auto seat_counts = VotesToMandates(
+    auto seat_counts = VotesToSeats(
         filtered_votes, district_seats.find(district)->second);
     for (auto R : seat_counts) {
       results[R.first] += R.second;

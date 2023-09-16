@@ -13,7 +13,6 @@ int main() {
   cout << "[ RUNNING ]" << std::endl;
   auto res = FromFile2019("../data_2019_sejm/wyniki_sejm.csv");
   assert_eq(res->ByDistrict().size(), (size_t) 41, "Number of districts");
-  cout << res->ByDistrict().size() << std::endl;
   auto wroclaw = res->ByDistrict()["3"];
   assert_eq(wroclaw.DistrictId(), std::string("3"), "district ID");
   assert_eq(wroclaw.TotalVoters(), 1001757, "citizens");
