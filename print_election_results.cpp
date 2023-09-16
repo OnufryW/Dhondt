@@ -1,4 +1,6 @@
 #include "assign_seats.h"
+#include "parse_election_results.h"
+#include "lib/parse_district_info.h"
 #include "lib/assign_seats_to_districts.h"
 #include <iostream>
 #include <map>

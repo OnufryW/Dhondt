@@ -1,7 +1,5 @@
 #ifndef ASSIGN_SEATS
 #define ASSIGN_SEATS
-#include "parse_district_info.h"
-#include "parse_election_results.h"
 #include "lib/election_results.h"
 #include "country_vote_bar.h"
 #include "dhondt.h"
