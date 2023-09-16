@@ -1,15 +1,15 @@
 #ifndef ASSIGN_SEATS
 #define ASSIGN_SEATS
-#include "lib/election_results.h"
 #include "country_vote_bar.h"
-#include "lib/dhondt.h"
+#include "election_results.h"
+#include "dhondt.h"
 #include <string>
 #include <map>
 #include <vector>
 #include <cstdlib>
 #include <cassert>
 
-std::map<std::string, int> GetElectionResults(
+std::map<std::string, int> AssignSeatsToParty(
     const std::map<std::string, int> &district_seats,
     ElectionResults *er) {
   std::map<std::string, int> results;

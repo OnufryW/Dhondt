@@ -1,10 +1,16 @@
 #ifndef COUNTRY_VOTE_BAR
 #define COUNTRY_VOTE_BAR
 
-#include "lib/election_results.h"
+#include "election_results.h"
 #include <map>
 #include <string>
 
+// This is somewhat of a hack. I'm hereby assuming:
+// 1) The only minority committee is the Germans, with the name as below
+// 2) The string "KOALICYJNY" is a clear distinguisher for coalitions
+//    (this does seem to hold up in both 2019 and 2023).
+// Returns the bar (in percent) that the committe has to pass, country-wide,
+// to receive seats.
 int BarValue(std::string committee_name) {
   if (committee_name.find("MNIEJSZO") != std::string::npos &&
       committee_name.find("NIEMIECKA") != std::string::npos) {
@@ -14,6 +20,8 @@ int BarValue(std::string committee_name) {
   return 5;
 }
 
+// Takes the election results, and returns a map from committee name to
+// a boolean: true if the committee is eligible to receive seats.
 std::map<std::string, bool> PassesBar(ElectionResults *er) {
   std::map<std::string, long long> total_votes;
   long long country_votes = 0;
@@ -32,6 +40,8 @@ std::map<std::string, bool> PassesBar(ElectionResults *er) {
   return result;
 }
 
+// Takes a map (from committee to some integer), and removes from the
+// map those committees that aren't eligible for seats.
 std::map<std::string, int> FilterParties(std::map<std::string, int> votes,
                                          std::map<std::string, bool> bar) {
   std::map<std::string, int> result;

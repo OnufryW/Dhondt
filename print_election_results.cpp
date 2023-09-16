@@ -1,4 +1,4 @@
-#include "assign_seats.h"
+#include "lib/assign_seats_to_party.h"
 #include "lib/parse_election_results.h"
 #include "lib/parse_district_info.h"
 #include "lib/assign_seats_to_districts.h"
@@ -12,7 +12,7 @@ int main() {
   auto district_info = DistrictInfoFromFile2019(
       "data_2019_sejm/okregi_sejm.csv");
   auto district_seats = DistrictsToSeats(district_info);
-  auto res = GetElectionResults(district_seats, er);
+  auto res = AssignSeatsToParty(district_seats, er);
   cout << "Faktyczne wyniki" << std::endl;
   for (auto R : res) {
     cout << R.first << "      " << R.second << std::endl;
@@ -20,7 +20,7 @@ int main() {
   cout << std::endl;
   auto correct_district_seats = AssignSeatsToDistricts(
       DistrictsToCitizens(district_info), 460);
-  res = GetElectionResults(correct_district_seats, er);
+  res = AssignSeatsToParty(correct_district_seats, er);
   cout << "Poprawne wyniki:" << std::endl;
   for (auto R : res) {
     std::cout << R.first << "      " << R.second << std::endl;
@@ -28,7 +28,7 @@ int main() {
   cout << std::endl;
   auto voter_district_seats = AssignSeatsToDistricts(
       DistrictsToVoters(district_info), 460);
-  res = GetElectionResults(voter_district_seats, er);
+  res = AssignSeatsToParty(voter_district_seats, er);
   cout << "Wg uprawnionych do glosowania wyniki:" << std::endl;
   for (auto R : res) {
     std::cout << R.first << "      " << R.second << std::endl;
