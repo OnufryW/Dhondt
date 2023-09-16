@@ -1,14 +1,12 @@
 #include "lib/parse_election_results.h"
 #include "lib/parse_district_info.h"
 #include <iostream>
-#include "assign_seats.h"
 using std::cout;
 
 int main() {
   ElectionResults *er = FromFile2019("data_2019_sejm/wyniki_sejm.csv");
   auto DI = DistrictInfoFromFile2019("data_2019_sejm/okregi_sejm.csv");
   auto vcbp = er->VoteCountsByParty();
-  auto res = GetElectionResults(DistrictsToSeats(DI), er);
 
   int total = 0;
   std::map<std::string, int> total_votes_by_district;
