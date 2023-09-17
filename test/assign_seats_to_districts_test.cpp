@@ -14,7 +14,7 @@ void test_assign_seats(const std::map<std::string, int> &in,
                        const std::string &description) {
   cout << "[ RUNNING ] " << description << std::endl;
   auto res = AssignSeatsToDistricts(in, total_seats);
-  assert_eq_si_maps(expected, res);
+  assert_eq_maps(expected, res);
   cout << "[ OK ]" << std::endl;
 }
 

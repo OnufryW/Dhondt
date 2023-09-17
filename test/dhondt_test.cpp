@@ -13,7 +13,7 @@ void test_dhondt(const std::map<std::string, int> &in, int total_seats,
                  const std::string &test_description) {
   cout << "[ RUNNING ] " << test_description << std::endl;
   auto res = VotesToSeats(in, total_seats);
-  assert_eq_si_maps(expected, res);
+  assert_eq_maps(expected, res);
   cout << "[ OK ]" << std::endl;
 }
 

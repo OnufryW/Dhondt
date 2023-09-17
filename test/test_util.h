@@ -6,45 +6,46 @@
 #include <cassert>
 #include <iostream>
 
-// Note: if needed, this can be templatized, I'm not using the actual
-// types here (as long as they're comparable and cout-able).
-void print_si_map(const std::map<std::string, int> &M) {
+template<typename T, typename K>
+void print_map(const std::map<K, T> &M) {
 	for (auto &value : M) {
     std::cout << value.first << ": " << value.second << std::endl;
 	}
 }
 
-void print_si_maps_and_fail(const std::map<std::string, int> &expected,
-                            const std::map<std::string, int> &actual) {
+template<typename T, typename K>
+void print_maps_and_fail(const std::map<K, T> &expected,
+                         const std::map<K, T> &actual) {
   std::cout << "Expected map: " << std::endl;
-  print_si_map(expected);
+  print_map(expected);
   std::cout << std::endl;
   std::cout << "Actually obtained map: " << std::endl;
-  print_si_map(actual);
+  print_map(actual);
   std::cout.flush();
   assert(false);
 }
 
-void assert_eq_si_maps(const std::map<std::string, int> &expected,
-                       const std::map<std::string, int> &actual) {
+template<typename T, typename K>
+void assert_eq_maps(const std::map<K, T> &expected,
+                       const std::map<K, T> &actual) {
   if (actual.size() != expected.size()) {
     std::cout << "FAILED: result map size (" << actual.size() 
               << ") does not match expected (" << expected.size() << ")!"
               << std::endl;
-    print_si_maps_and_fail(expected, actual);
+    print_maps_and_fail(expected, actual);
   }
   for (auto V : expected) {
     std::string key = V.first;
     if (actual.find(key) == actual.end()) {
       std::cout << "FAILED: result for " << key << " not found in actually "
                 << "obtained map!" << std::endl;
-      print_si_maps_and_fail(expected, actual);
+      print_maps_and_fail(expected, actual);
     }
     if (actual.find(key)->second != V.second) {
       std::cout << "FAILED: result for " << key << " ("
                 << actual.find(key)->second << ") does not match expectation("
                 << V.second << ")!" << std::endl;
-      print_si_maps_and_fail(expected, actual);
+      print_maps_and_fail(expected, actual);
     }
   }
 }
