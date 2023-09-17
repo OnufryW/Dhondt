@@ -102,4 +102,16 @@ void assert_eq(const T &expected, const T &actual, const std::string &desc) {
   }
 }
 
+const long double EPS = 1e-9;
+template<typename T>
+void assert_eq_eps(T expected, T actual, const std::string &desc,
+                   long double eps=EPS) {
+  if (actual < expected - eps || actual > expected + eps) {
+    std::cout << "FAILED: Obtained " << desc << " equal to '" << actual
+              << "', does not match expected '" << expected << "' within "
+              << eps << " precision" << std::endl;
+    assert(false);
+  }
+}
+
 #endif // TEST_UTIL
