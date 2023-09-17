@@ -27,7 +27,7 @@ void print_maps_and_fail(const std::map<K, T> &expected,
 
 template<typename T, typename K>
 void assert_eq_maps(const std::map<K, T> &expected,
-                       const std::map<K, T> &actual) {
+                    const std::map<K, T> &actual) {
   if (actual.size() != expected.size()) {
     std::cout << "FAILED: result map size (" << actual.size() 
               << ") does not match expected (" << expected.size() << ")!"
