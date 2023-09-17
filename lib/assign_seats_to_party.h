@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <cassert>
 
+// Takes actual election results, and the information which district gets
+// how many seats, and calculates the total seats each party obtains.
 std::map<std::string, int> AssignSeatsToParty(
     const std::map<std::string, int> &district_seats,
     ElectionResults *er) {
