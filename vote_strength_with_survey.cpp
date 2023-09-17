@@ -1,6 +1,8 @@
 #include "lib/parse_election_results.h"
 #include "lib/parse_district_info.h"
 #include "lib/seat_probability.h"
+#include "lib/parse_surveys.h"
+#include "lib/predict_election_results.h"
 #include <iostream>
 using std::cout;
 
@@ -8,6 +10,8 @@ const int repeats = 1000;
 
 int main() {
   ElectionResults *er = FromFile2019("data_2019_sejm/wyniki_sejm.csv");
+  auto surveys = ParseSurvey("data_2019_sejm/sondaze.csv");
+  er = ModifyElectionResults(er, surveys);
   auto DI = DistrictInfoFromFile2019("data_2019_sejm/okregi_sejm.csv");
   auto vcbp = er->VoteCountsByParty();
   auto dts = DistrictsToSeats(DI);

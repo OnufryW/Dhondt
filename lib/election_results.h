@@ -52,6 +52,9 @@ class ElectionResults {
   // Map from party name to a map < District ID, vote count >
   std::map<std::string, std::map<std::string, int>> VoteCountsByParty();
 
+  // Map from party name to total votes that party received countrywide.
+  std::map<std::string, int> TotalVoteCountsByParty();
+
  private:
   std::map<std::string, DistrictResults> election_results;
 };
@@ -71,4 +74,15 @@ ElectionResults::VoteCountsByParty() {
   return result;
 }
 
+std::map<std::string, int> ElectionResults::TotalVoteCountsByParty() {
+  std::map<std::string, int> result;
+  auto vcbp = VoteCountsByParty();
+  for (auto party : vcbp) {
+    result[party.first] = 0;
+    for (auto district : party.second) {
+      result[party.first] += district.second;
+    }
+  }
+  return result;
+}
 #endif // ELECTION_RESULTS
