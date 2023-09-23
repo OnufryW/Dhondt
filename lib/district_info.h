@@ -44,7 +44,6 @@ std::map<std::string, int> DistrictsToCitizens(
   return res;
 }
 
-
 std::map<std::string, int> DistrictsToVoters(
     const std::map<std::string, DistrictInfo> &district_info) {
   std::map<std::string, int> res;

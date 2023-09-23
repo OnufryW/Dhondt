@@ -1,0 +1,5 @@
+# The default first vote policy:
+# If we're closer to a new seat than to zero, just take the interval size
+# If we're closer to zero, take double the distance to the first seat.
+
+max(V + G, 2 * G)
