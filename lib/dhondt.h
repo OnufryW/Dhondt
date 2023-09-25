@@ -1,10 +1,13 @@
 #ifndef DHONDT
 #define DHONDT
 
+#include <cmath>
 #include <set>
 #include <map>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <queue>
 
 namespace {
 
@@ -14,13 +17,15 @@ typedef struct vote_candidate {
   int denominator;
 } vote_candidate;
 
-bool compare(const vote_candidate &A, const vote_candidate &B) {
-  if (A.votes * B.denominator != B.votes * A.denominator) {
-    return A.votes * B.denominator > B.votes * A.denominator;
+struct Compare {
+  bool operator()(const vote_candidate &A, const vote_candidate &B) const {
+    if (A.votes * B.denominator != B.votes * A.denominator) {
+      return A.votes * B.denominator < B.votes * A.denominator;
+    }
+    if (A.votes != B.votes) return A.votes < B.votes;
+    return A.party > B.party;
   }
-  if (A.votes != B.votes) return A.votes > B.votes;
-  return A.party < B.party;
-}
+};
 
 } // anon namespace
 
@@ -29,7 +34,8 @@ bool compare(const vote_candidate &A, const vote_candidate &B) {
 // (map from party name to number of seats).
 std::map<std::string, int> VotesToSeats(
     const std::map<std::string, int>& votes, int total_seats) {
-  std::set<vote_candidate, decltype(compare)*> VC(compare);
+  std::priority_queue<
+      vote_candidate, std::vector<vote_candidate>, Compare> VC;
   std::map<std::string, int> result;
   for (auto &V : votes) {
     result[V.first] = 0;
@@ -37,14 +43,14 @@ std::map<std::string, int> VotesToSeats(
     cand.party = V.first;
     cand.votes = V.second;
     cand.denominator = 1;
-    VC.insert(cand);
+    VC.push(cand);
   }
   for (int i = 0; i < total_seats; ++i) {
-    auto cand = *VC.begin();
+    auto cand = VC.top();
     result[cand.party] += 1;
-    VC.erase(VC.begin());
+    VC.pop();
     cand.denominator += 1;
-    VC.insert(cand);
+    VC.push(cand);
   }
   return result;
 }
@@ -89,9 +95,40 @@ int MinimumVotesToSeats(const std::map<std::string, int> &votes,
 // inaccurate, but it will be an off-by-one error, which shouldn't matter)
 std::vector<int> KeyVoteValues(const std::map<std::string, int> &votes,
                                int total_seats) {
+  // The implementation is somewhat optimized. What we do is:
+  // 1) Calculate the d'Hondt seat winners --- what really matters is the
+  //    set of values with which a seat is won.
+  //    We do that the same way as in VotesToSeats. It would probably be
+  //    faster to use a priority_queue instead of a set here, FWIW, but
+  //    I didn't bother.
+  // 2) Beginning from the weakest winner, we try to take away their
+  //    seat as our i-th seat. This means 
+  //        our_votes / i+1 >= their_votes / their_denominator.
+  //    Which allows us to calculate the key vote value.
   std::vector<int> res;
-  for (int desired_seats = 1; desired_seats <= total_seats; ++desired_seats) {
-    res.push_back(MinimumVotesToSeats(votes, total_seats, desired_seats));
+  std::priority_queue<
+      vote_candidate, std::vector<vote_candidate>, Compare> VC;
+  for (auto &V : votes) {
+    vote_candidate cand;
+    cand.party = V.first;
+    cand.votes = V.second;
+    cand.denominator = 1;
+    VC.push(cand);
+  }
+  std::vector<vote_candidate> winners;
+  for (int i = 0; i < total_seats; ++i) {
+    auto cand = VC.top();
+    winners.push_back(cand);
+    VC.pop();
+    cand.denominator += 1;
+    VC.push(cand);
+  }
+  // Begin from the last seat won.
+  std::reverse(winners.begin(), winners.end()); 
+  for (int i = 0; i < total_seats; ++i) {
+    res.push_back(
+        (winners[i].votes * (i + 1) + winners[i].denominator - 1) /
+            winners[i].denominator);
   }
   return res;
 }

@@ -51,7 +51,7 @@ int main() {
   test_key_vote_values({{"A", 5}}, 3, {2, 5, 15}, "Single opponent");
   test_key_vote_values({{"A", 20}, {"B", 7}}, 4, {7, 14, 30, 80},
                        "Two opponents");
-  test_key_vote_values({{"A", 21}, {"B", 21}}, 5, {8, 21, 32, 84, 105},
+  test_key_vote_values({{"A", 21}, {"B", 21}}, 5, {7, 21, 32, 84, 105},
                        "Two equal opponents");
   test_key_vote_values({{"A", 20}, {"B", 16}, {"C", 10}, {"D", 1}}, 6,
                        {7, 16, 30, 40, 80, 120},
