@@ -8,7 +8,8 @@
 #include <cmath>
 #include "dhondt.h"
 #include "distribution.h"
-#include "normal_distribution.h"
+#include "map_tools.h"
+#include "party_vote_distribution.h"
 
 const double stddev_percent = 3.0;
 
@@ -30,20 +31,17 @@ long double SeatShiftProbability(const std::map<std::string, int> &votes,
 
 long double SeatShiftProbabilityAllRandom(
     const std::map<std::string, int> &votes, int total_seats,
-    std::string party, int repeats, std::mt19937 &gen) {
+    std::string party, int repeats, std::mt19937 &gen, Expression *stddev) {
   std::vector<long double> results;
   std::map<std::string, Distribution*> distributions;
-  long long total_votes = 0;
+  long long total_votes = SumMap(votes);
   for (const auto &p: votes) {
-    total_votes += p.second;
-  }
-  for (const auto &p: votes) {
-    distributions[p.first] = new NormalDistribution(
-        p.second, total_votes * stddev_percent / 100);
+    distributions[p.first] =
+        GetPartyVoteDistribution(p.second, total_votes, stddev);
   }
   for (int r = 0; r < repeats; r++) {
     std::map<std::string, int> random_votes;
-    for (const auto& p : votes) if (p.first != party) {
+    for (const auto &p : votes) if (p.first != party) {
       random_votes[p.first] = std::max(
           std::round(distributions[p.first]->Draw(gen)), 1.L);
     }
@@ -58,5 +56,29 @@ long double SeatShiftProbabilityAllRandom(
   }
   return results[i] / repeats;
 }
+
+// Input is the standard committee -> district -> expected votes map,
+// a map from districts to seat counts, the number of repeats in each
+// district, a random generator, and the expression for generating the
+// stddev.
+std::map<std::string, std::map<std::string, int>> ProbabilisticSeatStrengths(
+    const std::map<std::string, std::map<std::string, int>> &expected_votes,
+    const std::map<std::string, int> &seat_counts,
+    int repeats, std::mt19937 &gen, Expression *stddev) {
+  // Pivoted result, we'll proceed by districts.
+  std::map<std::string, std::map<std::string, int>> pivoted_res;
+  for (const auto &district_data : PivotMap(expected_votes)) {
+    const std::string &district = district_data.first;
+    pivoted_res[district] = {};
+    for (const auto &committee_data : district_data.second) {
+      const std::string &committee = committee_data.first;
+      long double prob = SeatShiftProbabilityAllRandom(
+          district_data.second, seat_counts.at(district), committee,
+          repeats, gen, stddev);
+      pivoted_res[district][committee] = (prob < 1e-9 ? 1e9 : 1. / prob);
+    }
+  }
+  return PivotMap(pivoted_res);
+}  
 
 #endif // SEAT_PROBABILITY

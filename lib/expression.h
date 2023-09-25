@@ -1,6 +1,7 @@
 #ifndef EXPRESSION
 #define EXPRESSION
 
+#include <cmath>
 #include <cassert>
 #include <vector>
 #include <set>
@@ -61,6 +62,25 @@ class BinaryExpr : public Expression {
   }
  protected:
   Expression *left, *right;
+};
+
+class UnaryExpr : public Expression {
+ public:
+  UnaryExpr(Expression *child) : child(child) {}
+  virtual void SetVariable(const std::string &name, double val) {
+    child->SetVariable(name, val);
+  }
+  virtual void CollectVariableNames(std::set<std::string> &names) {
+    child->CollectVariableNames(names);
+  }
+ protected:
+  Expression *child;
+};
+
+class Sqrt : public UnaryExpr {
+ public:
+  Sqrt(Expression *child) : UnaryExpr(child) {}
+  double Calculate() { return std::sqrt(child->Calculate()); }
 };
 
 class Sum : public BinaryExpr {
@@ -131,6 +151,11 @@ std::vector<Token> tokenize(const std::string &S) {
       pos += 3;
       continue;
     }
+    if (S.size() >= 4 && S.substr(pos,4) == "sqrt") {
+      res.push_back(Token('Q'));
+      pos += 4;
+      continue;
+    }
     if (VALID_TOKENS.find(S[pos]) != std::string::npos) {
       res.push_back(Token(S[pos++]));
       continue;
@@ -185,6 +210,13 @@ Expression *GetPrimary(std::vector<Token> &tokens, size_t &curr) {
     assert(tokens[curr++].token == ')');
     if (func == 'I') return new Min(left, right);
     if (func == 'X') return new Max(left, right);
+  }
+  if (tokens[curr].token == 'Q') {
+    char func = tokens[curr++].token;
+    assert(tokens[curr++].token == '(');
+    Expression *child = GetExpression(tokens, curr);
+    assert(tokens[curr++].token == ')');
+    if (func == 'Q') return new Sqrt(child);
   }
   assert(false);
 }

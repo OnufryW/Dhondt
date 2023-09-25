@@ -54,8 +54,11 @@ int main() {
       "20 * max(0.7 * (V+G) - V, 0) * (0.7 * (V+G) - V) / (V+G) + (V+G)",
       {{"V", 999}, {"G", 1}},
       1000, "First vote policy expression");
+  test_expression("sqrt(4 * 4)", {}, 4, "sqrt");
   test_collect_variable_names("\"AB\" + A", {"AB", "A"}, "simple");
   test_collect_variable_names("15", {}, "no variables");
   test_collect_variable_names("A * A + B * B + B/A",
                               {"A", "B"}, "repeated");
+  test_collect_variable_names("sqrt(min(A,B))", {"A", "B"},
+                              "unary & binary");
 }

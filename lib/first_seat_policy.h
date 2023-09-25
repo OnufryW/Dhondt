@@ -1,9 +1,9 @@
 #ifndef FIRST_SEAT_POLICY
 #define FIRST_SEAT_POLICY
 
-#include <fstream>
 #include <string>
 #include "expression.h"
+#include "parse_config_file.h"
 
 // A "First Seat Policy" is in the context of calculating vote strength
 // based on the length of the d'Hondt interval.
@@ -28,16 +28,8 @@ class ExpressionFirstSeatPolicy : public FirstSeatPolicy {
 };
 
 FirstSeatPolicy *FirstSeatPolicyFromFile(const std::string &filename) {
-  std::fstream fs;
-  fs.open(filename, std::ios::in);
-  std::string line;
-  while (std::getline(fs, line)) {
-    if (line.size() == 0 || line[0] == '\n' || line[0] == '#') {
-      continue;
-    }
-    return new ExpressionFirstSeatPolicy(ExpressionFromString(line));
-  }
-  assert(false);
+  return new ExpressionFirstSeatPolicy(ExpressionFromString(
+      ParseOneLineConfigFile(filename)));
 }
 
 #endif  // FIRST_SEAT_POLICY

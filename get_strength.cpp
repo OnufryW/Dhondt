@@ -1,5 +1,6 @@
 #include <string>
 #include <iostream>
+#include <random>
 
 #include "lib/parse_election_results.h"
 #include "lib/parse_presidential_results.h"
@@ -12,6 +13,8 @@
 #include "lib/first_seat_policy.h"
 #include "lib/vote_strength_by_dhondt_interval.h"
 #include "lib/assign_seats_to_party.h"
+#include "lib/party_vote_distribution.h"
+#include "lib/seat_probability.h"
 #include "lib/output_map.h"
 
 using std::string;
@@ -23,9 +26,12 @@ const string pkw_citizens_filename = "data_2019_sejm/dane_z_listu_pkw.csv";
 const string surveys_filename = "data_2019_sejm/sondaze.csv";
 
 const string transferral_config = "config/vote_transferral_policy.txt";
-const string first_seat_policy_config = "config/first_vote_policy.txt";
+const string first_seat_policy_config = "config/first_seat_policy.txt";
+const string stddev_config = "config/vote_distribution_config.txt";
 
-const bool OUTPUT_INTERIM_DATA = true;
+const int repeats = 10;
+
+const bool OUTPUT_INTERIM_DATA = false;
 
 int main() {
   /********************* 2019 results transferred to 2023 **************/
@@ -63,7 +69,6 @@ int main() {
   /************** Scaling to survey results ****************************/
   // Scale by survey results. First, load surveys.
   auto surveys = ParseSurvey(surveys_filename);
-  std::cout << "Surveys:" << std::endl; DisplayMap(surveys);
   // Scale survey results, so that they sum up (roughly) to the number of
   // votes we expect:
   auto scaled_surveys = ScaleSingleMap(
@@ -73,8 +78,6 @@ int main() {
   // party to the survey values.
   auto party_scaling_factors = CalculateScalingFactors(
       SumSubmaps(popscaled2023), scaled_surveys);
-  std::cout << "Scaling factors:" << std::endl;
-  DisplayMap(party_scaling_factors);
   // And apply the scaling factors.
   auto scaled2023 = ScaleVotesByParty(popscaled2023, party_scaling_factors);
   if (OUTPUT_INTERIM_DATA) {
@@ -89,15 +92,31 @@ int main() {
     VisualDivider();
   }
 
-  /************* Calculating vote strength ****************************/
+  /************* Calculating vote strength by interval ****************/
   // Get the first seat policy
   FirstSeatPolicy *first_seat_policy =
       FirstSeatPolicyFromFile(first_seat_policy_config);
   // Calculate vote strength by party
-  auto vote_strengths = InverseVoteStrengthForAll(
+  auto vote_strengths_interval = InverseVoteStrengthForAll(
       scaled2023, DistrictsToSeats(district_infos), first_seat_policy);
 
+  /*************** Calculate vote strength by probability *************/
+  // Randomness.
+  std::random_device rd{};
+  std::mt19937 gen{rd()};
+  // Parse the stddev config.
+  Expression *vote_distribution_config =
+      PartyVoteDistributionConfig(stddev_config);
+  // Get the seat strengthsi
+  auto vote_strengths_probability = ProbabilisticSeatStrengths(
+      scaled2023, DistrictsToSeats(district_infos), repeats, gen,
+      vote_distribution_config);
+
   /*************** Output *********************************************/
+  std::cout << std::endl << "Vote strengths by interval length" << std::endl;
   DisplayMapOfMaps(ExpandDistrictNamesInMapOfMaps(
-      vote_strengths, DistrictsToNames(district_infos)));  
+      vote_strengths_interval, DistrictsToNames(district_infos))); 
+  std::cout << std::endl << "Vote strengths by probability" << std::endl;
+  DisplayMapOfMaps(ExpandDistrictNamesInMapOfMaps(
+      vote_strengths_probability, DistrictsToNames(district_infos)));
 }

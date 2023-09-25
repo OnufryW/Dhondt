@@ -1,0 +1,22 @@
+# This config contains an expresion that describes how to calculate the
+# stddev of a distribution of votes for a single committee in a single
+# district. As an input, it takes two values: T (the total number of votes
+# we expect in this district), and V (the expected value of the number of
+# votes for our committee).
+
+# This is somewhat of a guesswork - there are many sources of error here.
+# TODO: run a test, where we try to predict 2019 results using 2015 data
+# with our methodology, and see what sorts of errors we get.
+# Note that it's a pure guess that T and V are the most relevant values
+# here, but it seems to be a reasonably well-educated one (and I actually
+# believe the key value is V/T, plus the stddev will be proportional to
+# V (or to T, since we know their quotient).
+
+# I use sqrt((V/T) (1 - V/T)) as the baseline, just because that's the
+# typical variance of sampling (if you take N samples of something that
+# is 1 with probability P, then the stddev is sqrt(P(1-P)/N)).
+
+T * sqrt( (V/T) * (1 - V/T) ) / 10
+
+# Scaled so that a committee with support around 10% will have an stddev
+# of 3%, which is my gut feel about what we should get.
