@@ -29,7 +29,7 @@ const string transferral_config = "config/vote_transferral_policy.txt";
 const string first_seat_policy_config = "config/first_seat_policy.txt";
 const string stddev_config = "config/vote_distribution_config.txt";
 
-const int repeats = 1000;
+const int repeats = 10000;
 
 const bool OUTPUT_INTERIM_DATA = false;
 
