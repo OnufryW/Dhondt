@@ -1,10 +1,22 @@
 #ifndef PARSE_PKW_DISTRICT_INFO
 #define PARSE_PKW_DISTRICT_INFO
 
+#include "district_info.h"
 #include "parse_election_results.h"
 #include "parse_district_info.h"
 #include "parse_csv.h"
 
+std::map<std::string, int> GetPkwPopulationData(const std::string &filename) {
+  std::map<std::string, int> res;
+  auto PKW = ParseFile(filename);
+  for (auto line : PKW) {
+    if (line[0] == PKW[0][0]) continue;  // Skip header line.
+    res[line[0]] = std::atoi(line[1].c_str());
+  }
+  return res;
+}
+
+// This is old, and probably useless.
 std::map<std::string, int> VotesPerMandate(
     const std::string &district_info_filename,
     const std::string &election_results_filename,
@@ -30,7 +42,7 @@ std::map<std::string, int> VotesPerMandate(
     std::string district = line[0];
     int votes_per_mandate =
         (long long) total_votes_by_district[district] * 
-        (long long) atoi(line[1].c_str())
+        (long long) std::atoi(line[1].c_str())
             / (long long) DI[district].citizens
             / (long long) DI[district].seats;
     result[district] = votes_per_mandate;

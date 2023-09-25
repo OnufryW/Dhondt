@@ -19,8 +19,8 @@ class ExpressionFirstSeatPolicy : public FirstSeatPolicy {
   // and G (votes needed for first seat).
   ExpressionFirstSeatPolicy(Expression *expr) : expr(expr) {}
   int GetStrength(int votes, int G) const {
-    expr->SetVariable('V', votes);
-    expr->SetVariable('G', G);
+    expr->SetVariable("V", votes);
+    expr->SetVariable("G", G);
     return (int) expr->Calculate();
   }
  private:

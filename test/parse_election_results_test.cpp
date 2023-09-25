@@ -18,14 +18,14 @@ int main() {
   assert_eq(wroclaw.TotalVoters(), 1001757, "citizens");
   assert_eq(wroclaw.TotalVotes(), 654455, "voters");
   assert_eq(wroclaw.DistrictName(), std::string("Okręg Wyborczy Nr 3"), "district name");
-  assert_eq(wroclaw.VoteCountByParty()[
-      "KOMITET WYBORCZY POLSKIE STRONNICTWO LUDOWE - ZPOW-601-19/19"],
+  assert_eq(wroclaw.VoteCountByParty().at(
+      "KOMITET WYBORCZY POLSKIE STRONNICTWO LUDOWE - ZPOW-601-19/19"),
     42269, "PSL votes");
-  assert_eq(wroclaw.VoteCountByParty()[
-      "KOMITET WYBORCZY KONFEDERACJA WOLNOŚĆ I NIEPODLEGŁOŚĆ - ZPOW-601-5/19"],
+  assert_eq(wroclaw.VoteCountByParty().at(
+      "KOMITET WYBORCZY KONFEDERACJA WOLNOŚĆ I NIEPODLEGŁOŚĆ - ZPOW-601-5/19"),
     48775, "Konfederacja votes");
-  auto psl = res->VoteCountsByParty()[
-      "KOMITET WYBORCZY POLSKIE STRONNICTWO LUDOWE - ZPOW-601-19/19"];
+  auto psl = res->VoteCountsByParty().at(
+      "KOMITET WYBORCZY POLSKIE STRONNICTWO LUDOWE - ZPOW-601-19/19");
   assert_eq(psl["3"], 42269, "By Party PSL in Wroclaw");
   assert_eq(psl["19"], 65683, "By Party PSL in Warsaw");
   cout << "[ OK ]" << std::endl;

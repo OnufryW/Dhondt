@@ -1,0 +1,9 @@
+# Test vote transfer config.
+# Comments, to check we parse them correctly
+# Might contain = and // and AA
+
+# And empty lines
+
+P1 = A + B
+P2 = "A"
+P3 = "P3" * 0.5

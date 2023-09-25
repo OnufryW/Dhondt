@@ -6,12 +6,12 @@
 #include <string>
 #include "parse_csv.h"
 
-std::map<std::string, std::pair<std::string, long double>>
-    ParseSurvey(const std::string &filename) {
-  std::map<std::string, std::pair<std::string, long double>> result;
+std::map<std::string, int> ParseSurvey(const std::string &filename) {
+  std::map<std::string, int> result;
   auto parsed = ParseFile(filename);
   for (auto line : parsed) {
-    result[line[0]] = make_pair(line[1], (long double) atof(line[2].c_str()));
+    int value = (int) (1000 * atof(line[1].c_str()));
+    result[line[0]] = value;
   }
   return result;
 }

@@ -1,6 +1,7 @@
 #ifndef PARSE_CSV
 #define PARSE_CSV
 
+#include "trim.h"
 #include <fstream>
 #include <string>
 #include <vector>
@@ -12,7 +13,7 @@ std::string VectorCharToString(const std::vector<char> &V) {
   std::string result;
   result.resize(V.size(), '_');  // _ to make it obvious in case of bugs.
   for (int i = 0; i < (int) V.size(); ++i) result[i] = V[i];
-  result.erase(result.find_last_not_of(whitespace) + 1);
+  Trim(result);
   return result;
 }
 

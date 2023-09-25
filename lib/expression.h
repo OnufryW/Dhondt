@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <vector>
+#include <set>
 #include <map>
 #include <algorithm>
 
@@ -10,31 +11,38 @@ class Expression {
  public:
   virtual double Calculate() = 0;
   virtual void SetVariable(const std::string &name, double value) {}
+  // Add the names of all the variables in all the sub-expressions.
+  virtual void CollectVariableNames(std::set<std::string> &names) = 0;
 };
 
 class Variable : public Expression {
  public:
-  Variable(std::string C) : C(C), value(0), set(false) {}
+  Variable(const std::string &C) : name(C), value(0), is_set(false) {}
   double Calculate() {
-    assert(set);
+    assert(is_set);
     return value;
   }
   void SetVariable(const std::string &toset, double val) {
     if (toset == name) { 
-      set = true;
+      is_set = true;
       value = val;
     }
   }
+  void CollectVariableNames(std::set<std::string> &names) {
+    names.insert(name);
+  }
+
  private:
-  std::string name
+  std::string name;
   double value;
-  bool set;
+  bool is_set;
 };
 
 class Const : public Expression {
  public:
   Const(double val) : val(val) {}
   double Calculate() { return val; }
+  void CollectVariableNames(std::set<std::string> &names) {}
  private:
   double val;
 };
@@ -46,6 +54,10 @@ class BinaryExpr : public Expression {
   virtual void SetVariable(const std::string &name, double val) {
     left->SetVariable(name, val);
     right->SetVariable(name, val);
+  }
+  virtual void CollectVariableNames(std::set<std::string> &names) {
+    left->CollectVariableNames(names);
+    right->CollectVariableNames(names);
   }
  protected:
   Expression *left, *right;
@@ -100,7 +112,7 @@ struct Token {
   char token;
 };
 
-const std::string VALID_TOKENS = "+-*/,()\"";
+const std::string VALID_TOKENS = "+-*/,()";
 const std::string NUMBER_ELEMENTS = "0123456789.";
 
 std::vector<Token> tokenize(const std::string &S) {
@@ -136,13 +148,14 @@ std::vector<Token> tokenize(const std::string &S) {
     }
     // Allow variables that are single-char, unquoted, or quoted string.
     if (S[pos] == '"') {
-      std::string = name;
+      std::string name;
       pos++;
       while (S[pos] != '"') {
         name += S[pos++];
       }
       pos++;
-      res.push_back(Token(new Variable(name)))
+      res.push_back(Token(new Variable(name)));
+      continue;
     }
     res.push_back(Token(new Variable(std::string(1, S[pos++]))));
   }

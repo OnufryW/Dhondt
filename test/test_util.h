@@ -2,6 +2,8 @@
 #define TEST_UTIL
 
 #include <string>
+#include <vector>
+#include <set>
 #include <map>
 #include <cassert>
 #include <iostream>
@@ -89,6 +91,70 @@ void assert_vector_eq(const std::vector<T> &expected,
                 << std::endl;
       print_vectors_and_fail(expected, actual);
     }
+  }
+}
+
+template<typename T>
+void print_set(const std::set<T> &S) {
+  std::cout << "[";
+  bool first = true;
+  for (auto &e : S) {
+    if (!first) std::cout << ", ";
+    first = false;
+    std::cout << e;
+  }
+  std::cout << "]" << std::endl;
+}
+
+template<typename T>
+void print_sets_and_fail(const std::set<T> &expected,
+                         const std::set<T> &actual) {
+  std::cout << "Expected set: ";
+  print_set(expected);
+  std::cout << "Actual set: ";
+  print_set(actual);
+  std::cout.flush();
+  assert(false);
+}
+
+template<typename T>
+void assert_set_eq(const std::set<T> &expected, const std::set<T> &actual) {
+  if (actual.size() != expected.size()) {
+    std::cout << "FAILED: result set size (" << actual.size()
+              << ") does not match expected (" << expected.size() << ")!"
+              << std::endl;
+    print_sets_and_fail(expected, actual);
+  }
+  for (auto &el : expected) {
+    if (actual.find(el) == actual.end()) {
+      std::cout << "FAILED: element '" << el << "' is expected, but absent "
+                << "in the actual set!" << std::endl;
+      print_sets_and_fail(expected, actual);
+    }
+  }
+}
+
+template<typename T, typename K1, typename K2>
+void assert_eq_map_of_maps(const std::map<K1, std::map<K2, T>> &expected,
+                           const std::map<K1, std::map<K2, T>> &actual) {
+  if (actual.size() != expected.size()) {
+    std::cout << "FAILED: result map size (" << actual.size()
+              << ") does not match expected (" << expected.size() << ")!"
+              << std::endl;
+    std::set<K1> expected_keys;
+    for (const auto &entry : expected) {
+      expected_keys.insert(entry.first);
+    }
+    std::set<K1> actual_keys;
+    for (const auto &entry : actual) {
+      actual_keys.insert(entry.first);
+    }
+    std::cout << "Keys of both the maps: " << std::endl;
+    print_sets_and_fail(expected_keys, actual_keys);
+  }
+  for (auto &entry : expected) {
+    std::cout << "Checking " << entry.first << std::endl;
+    assert_eq_maps(expected.at(entry.first), actual.at(entry.first));
   }
 }
 

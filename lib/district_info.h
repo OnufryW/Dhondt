@@ -12,8 +12,8 @@ class DistrictInfo {
   DistrictInfo() {}
   DistrictInfo(std::string code, int seats, int citizens, int voters,
                std::string name) :
-      code(code), seats(seats), citizens(citizens), voters(voters),
-      name(name) {}
+      code(std::move(code)), seats(seats), citizens(citizens),
+      voters(voters), name(std::move(name)) {}
 
   std::string code;  // The code (a number from 1 to 41) of the district.
   int seats;  // The number of seats to be won in this district
@@ -49,6 +49,15 @@ std::map<std::string, int> DistrictsToVoters(
   std::map<std::string, int> res;
   for (const auto &D : district_info) {
     res[D.first] = D.second.voters;
+  }
+  return res;
+}
+
+std::map<std::string, std::string> DistrictsToNames(
+    const std::map<std::string, DistrictInfo> &district_info) {
+  std::map<std::string, std::string> res;
+  for (const auto &D : district_info) {
+    res[D.first] = D.second.name;
   }
   return res;
 }

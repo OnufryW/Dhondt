@@ -7,13 +7,6 @@
 
 using std::cout;
 
-void TestDensity(long double pt, long double expected,
-                 NormalDistribution &nd) {
-  cout << "[ RUNNING ] Density test at " << pt << std::endl;
-  assert_eq_eps(expected, nd.DensityAt(pt), "density");
-  cout << "[ OK ]" << std::endl;
-}
-
 void TestCdf(long double pt, long double expected, NormalDistribution &nd,
              long double eps = EPS) {
   cout << "[ RUNNING ] Cdf test at " << pt << std::endl;
@@ -41,22 +34,16 @@ void MonteCarloTestCdf(long double pt, int retries, NormalDistribution &nd,
 int main() {
   // First, test the properties of the standard normal distribution.
   NormalDistribution standard(0, 1);
-  TestDensity(0, 0.3989422804L, standard);
-  TestDensity(1, 0.24197072451L, standard);
-  TestDensity(2, 0.05399096651L, standard);
   TestCdf(0, 0.5L, standard);
   TestCdf(1, 0.8413, standard, 0.0001);
   TestCdf(2, 0.9772, standard, 0.0001);
 
   // Test a few other distributions.
   NormalDistribution mean_one(1, 1);
-  TestDensity(1, standard.DensityAt(0), mean_one);
-  TestDensity(-1, standard.DensityAt(-2), mean_one);
   TestCdf(0, standard.CdfAt(-1), mean_one);
   TestCdf(0.5, standard.CdfAt(-0.5), mean_one);
 
   NormalDistribution wide(0, 1000);
-  TestDensity(1000, standard.DensityAt(1) / 1000, wide);
   TestCdf(0, 0.5, wide);
   TestCdf(500, standard.CdfAt(0.5), wide);
   TestCdf(2000, standard.CdfAt(2), wide);

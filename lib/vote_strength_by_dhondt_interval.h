@@ -5,6 +5,7 @@
 #include <string>
 #include "dhondt.h"
 #include "first_seat_policy.h"
+#include "map_tools.h"
 
 // This is a policy for counting vote strength for a given party in a given
 // district based on the length of the d'Hondt intervals.
@@ -76,5 +77,23 @@ std::map<std::string, int> InverseVoteStrengths(
   }
   return result;
 }
-                        
+
+// Takes the standard committee -> district -> int vote map, and returns
+// the inverse vote strength in the same format.
+std::map<std::string, std::map<std::string, int>> InverseVoteStrengthForAll(
+    const std::map<std::string, std::map<std::string, int>> &votes,
+    const std::map<std::string, int> &seats_per_district,
+    const FirstSeatPolicy *first_seat_policy) {
+  auto votes_by_district = PivotMap(votes);
+  // Calculate district by district.
+  std::map<std::string, std::map<std::string, int>> pivoted_result;
+  for (const auto &district_votes : votes_by_district) {
+    std::string district = district_votes.first;
+    pivoted_result[district] = InverseVoteStrengths(
+        district_votes.second, seats_per_district.at(district),
+        first_seat_policy);
+  }
+  return PivotMap(pivoted_result);
+}
+
 #endif  // VOTE_STRENGTH_BY_DHONDT_INTERVAL

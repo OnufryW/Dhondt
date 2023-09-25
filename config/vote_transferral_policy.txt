@@ -1,0 +1,33 @@
+# This config describes how to translate vote counts in previous elections
+# (on a set of parties that is different than the one in the current
+# election) to vote counts in this election.
+# It generally follows the pattern of
+# Foo = 0.5 * Baz + 0.3 * Bar + 0.2 * Qux
+# Where "Foo" is a name of a party in the current election, and
+# Baz, Bar and Qux are suffixes or prefixes of names of parties / 
+# candidates in previous elections.
+# The formula is applied without any scaling, either with respect to
+# survey results or to population count changes, it's just applied as-is.
+
+# We could also add some data from the presidential election, but, meh...
+
+Lewica = "-1/19"
+Koalicja Obywatelska = "-6/19"
+Konfederacja = "-5/19"
+Mniejszość Niemiecka = "-15/19"
+Prawo i Sprawiedliwość =  "-9/19"
+
+# There's a judgement call here - how to weigh the results of PSL and of
+# Hołownia into TD's result. I'm (totally arbitrarily) assigning a 50/50
+# split between them. Generally all the results are scaled to the 2019
+# total votes, so I'll do that as well here - since PSL got 8.55 votes total
+# and Hołownia got 13.87% in presidential elections, I'll scale Hołownia
+# down to 8.55% (so that results are comparable with PSL), and then take
+# the average of the two.
+
+Trzecia Droga = "-19/19" * 0.5 + "HOŁOWNIA" * 0.5 * (8.55 / 13.87)
+
+# They're likely not getting in, but they started in 2019 as well, so it's
+# easy to get.
+
+Bezpartyjni Samorządowcy = "-10/19"

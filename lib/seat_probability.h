@@ -23,7 +23,7 @@ long double SeatShiftProbability(const std::map<std::string, int> &votes,
   long double res = 0;
   std::vector<int> key_values = KeyVoteValues(votes, total_seats);
   for (int val : key_values) {
-    res += our_votes.CdfAt(val + 1) - our_votes.CdfAt(val);
+    res += our_votes.CdfAt(val) - our_votes.CdfAt(val - 1);
   }
   return res;
 }

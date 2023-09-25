@@ -17,7 +17,13 @@ std::vector<bool> valid_startpoints(const std::vector<std::string> &votes) {
   return res;
 }
 
-
+// The problem we're solving here is that the length of the CSV line is
+// somewhat undetermined. However, the last entries are the party vote
+// counts, which I'm looking for, and they're preceded by the total vote
+// count. So, what we do is we try to find the total_vote_count column,
+// by looking at which values happen to be sums of all the values after
+// them; the total vote count column will be the column for which this
+// holds for all the rows.
 int total_counts_index(const std::vector<std::vector<std::string>> &votes) {
   std::vector<bool> is_valid_startpoint(votes[0].size(), true);
   for (int i = 1; i < (int) votes.size(); ++i) {
@@ -41,6 +47,8 @@ ElectionResults *FromFile2019(const std::string &filename) {
   for (int i = 1; i < (int) parsed_vote_lines.size(); ++i) {
     std::string district_id = parsed_vote_lines[i][0];
     std::string district_name = parsed_vote_lines[i][1];
+    // Note: here and elsewhere in this file using atoi instead of
+    // std::atoi, because I want to also parse empty strings to zeroes.
     int total_votes = atoi(parsed_vote_lines[i][total_index].c_str());
     int total_voters = atoi(parsed_vote_lines[i][3].c_str());
     std::map<std::string, int> vcbp;

@@ -4,6 +4,7 @@
 #include "election_results.h"
 #include "parse_csv.h"
 
+// TODO: Remove this file.
 ElectionResults *ModifyElectionResults(
     ElectionResults *old_results,
     std::map<std::string, std::pair<std::string, long double>> surveys) {
