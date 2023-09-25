@@ -5,7 +5,7 @@
 
 using std::cout;
 
-const std::string filename = "../config/first_vote_policy.txt";
+const std::string filename = "../config/first_seat_policy.txt";
 
 int main() {
   cout << "[ RUNNING ] First seat policy config test" << std::endl;
