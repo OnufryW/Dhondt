@@ -1,0 +1,20 @@
+# File configs
+
+sejm_results_filename = data_2019_sejm/wyniki_sejm.csv
+presidential_results_filename = data_2020_president/prezydenckie.csv
+district_info_filename = data_2019_sejm/okregi_sejm.csv
+pkw_citizens_filename = data_2019_sejm/dane_z_listu_pkw.csv
+surveys_filename = data_2019_sejm/sondaze.csv
+
+# Other configs
+
+transferral_config = config/vote_transferral_policy.txt
+stddev_config = config/vote_distribution_config.txt
+
+repeats = 100000
+
+# What to actually do
+
+action = probabilistic
+district_names = expanded
+output = csv

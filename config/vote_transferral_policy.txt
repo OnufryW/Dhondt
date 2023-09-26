@@ -29,5 +29,5 @@ Trzecia Droga = "-19/19" * 0.5 + "HOŁOWNIA" * 0.5 * (8.55 / 13.87)
 
 # They're likely not getting in, but they started in 2019 as well, so it's
 # easy to get.
-
-Bezpartyjni Samorządowcy = "-10/19"
+# (OK, actually that's dumb, because they didn't start everywhere)
+# Bezpartyjni Samorządowcy = "-10/19"

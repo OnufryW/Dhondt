@@ -27,6 +27,22 @@ void VisualDivider() {
             << std::endl;
 }
 
+template<typename T>
+void CsvMapOfMaps(const std::map<std::string, std::map<std::string, T>> &m) {
+  std::cout << "\"\";";
+  for (const auto &committee_data : m) {
+    std::cout << "\"" << committee_data.first << "\";";
+  }
+  std::cout << std::endl;
+  for (const auto &district : m.begin()->second) {
+    std::cout << "\"" << district.first << "\";";
+    for (const auto &committee_data : m) {
+      std::cout << committee_data.second.at(district.first) << ";";
+    }
+    std::cout << std::endl;
+  }
+}
+
 // Changes a map mapping district ID to integers to the same map, but the
 // key is DistrictName (ID)
 std::map<std::string, int> ExpandDistrictNamesInMap(
@@ -51,6 +67,42 @@ ExpandDistrictNamesInMapOfMaps(
         ExpandDistrictNamesInMap(key_map.second, district_names);
   }
   return result;
+}
+
+void OutputMapOfMaps(
+    std::map<std::string, std::map<std::string, int>> map_of_maps,
+    const std::string &output_format,
+    const std::string &district_names_config,
+    const std::map<std::string, std::string> &district_names) {
+  if (district_names_config == "expanded") {
+    map_of_maps = ExpandDistrictNamesInMapOfMaps(
+        map_of_maps, district_names);
+  } else {
+    assert(district_names_config == "");
+  }
+  if (output_format == "stdout") {
+    DisplayMapOfMaps(map_of_maps);
+  } else if (output_format == "csv") {
+    CsvMapOfMaps(map_of_maps);
+  } else {
+    assert(false);
+  }
+}
+
+void OutputMap(
+    std::map<std::string, int> mp, const std::string &output_format,
+    const std::string &district_names_config,
+    const std::map<std::string, std::string> &district_names) {
+  if (district_names_config == "expanded") {
+    mp = ExpandDistrictNamesInMap(mp, district_names);
+  } else {
+    assert(district_names_config == "");
+  }
+  if (output_format == "stdout") {
+    DisplayMap(mp);
+  } else {  // TODO: Add CSV option.
+    assert(false);
+  }
 }
 
 #endif  // OUTPUT_MAP

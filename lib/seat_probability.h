@@ -75,7 +75,7 @@ std::map<std::string, std::map<std::string, int>> ProbabilisticSeatStrengths(
       long double prob = SeatShiftProbabilityAllRandom(
           district_data.second, seat_counts.at(district), committee,
           repeats, gen, stddev);
-      pivoted_res[district][committee] = (prob < 1e-9 ? 1e9 : 1. / prob);
+      pivoted_res[district][committee] = 30000000 * prob;
     }
   }
   return PivotMap(pivoted_res);

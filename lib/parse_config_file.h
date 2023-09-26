@@ -4,6 +4,8 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <map>
+#include "trim.h"
 
 std::vector<std::string> ParseConfigFile(const std::string &filename) {
   std::fstream fs;
@@ -15,6 +17,22 @@ std::vector<std::string> ParseConfigFile(const std::string &filename) {
       continue;
     }
     res.push_back(line);
+  }
+  return res;
+}
+
+std::map<std::string, std::string> ParseConfigFileToMap(
+    const std::string &filename) {
+  auto parsed_to_vector = ParseConfigFile(filename);
+  std::map<std::string, std::string> res;
+  for (const std::string &line : parsed_to_vector) {
+    auto equals_pos = line.find("=");
+    assert(equals_pos != std::string::npos);
+    std::string key = line.substr(0, equals_pos);
+    Trim(key);
+    std::string value = line.substr(equals_pos + 1);
+    Trim(value);
+    res[key] = value;
   }
   return res;
 }

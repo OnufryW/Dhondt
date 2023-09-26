@@ -1,0 +1,6 @@
+"Lewica";"12.56"
+"Koalicja Obywatelska";"27.4"
+"Konfederacja";"6.81"
+"Mniejszość Niemiecka";"0.17"
+"Prawo i Sprawiedliwość";"43.59"
+"PSL";"8.55"

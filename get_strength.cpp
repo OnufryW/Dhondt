@@ -1,6 +1,8 @@
+#include <vector>
 #include <string>
 #include <iostream>
 #include <random>
+#include <cassert>
 
 #include "lib/parse_election_results.h"
 #include "lib/parse_presidential_results.h"
@@ -19,104 +21,123 @@
 
 using std::string;
 
-const string results_2019_filename = "data_2019_sejm/wyniki_sejm.csv";
-const string results_2020_filename = "data_2020_president/prezydenckie.csv";
-const string district_info_filename = "data_2019_sejm/okregi_sejm.csv";
-const string pkw_citizens_filename = "data_2019_sejm/dane_z_listu_pkw.csv";
-const string surveys_filename = "data_2019_sejm/sondaze.csv";
+// Obligatory configs
+const string transferral_config = "transferral_config";
+const string district_info_filename = "district_info_filename";
+const string action = "action";
+const string output = "output";
 
-const string transferral_config = "config/vote_transferral_policy.txt";
-const string first_seat_policy_config = "config/first_seat_policy.txt";
-const string stddev_config = "config/vote_distribution_config.txt";
+// Optional configs
+const string sejm_results_filename = "sejm_results_filename";
+const string presidential_results_filename = "presidential_results_filename";
+const string pkw_citizens_filename = "pkw_citizens_filename";
+const string surveys_filename = "surveys_filename";
+const string district_names = "district_names";
+const string first_seat_policy_config = "first_seat_policy_config";
+const string stddev_config = "stddev_config";
+const string repeats = "repeats";
 
-const int repeats = 10000;
+bool ConfigContains(const std::map<std::string, std::string> &config,
+                    const std::string &key) {
+  return config.find(key) != config.end();
+}
 
-const bool OUTPUT_INTERIM_DATA = false;
+void AssertConfigContains(const std::map<std::string, std::string> &config,
+                          const std::string &key) {
+  assert(ConfigContains(config, key));
+}
 
-int main() {
-  /********************* 2019 results transferred to 2023 **************/
-  // Get 2019 election results, in committee -> district -> votes format.
-  auto results2019 =
-      FromFile2019(results_2019_filename)->VoteCountsByParty();
+int main(int argc, char *argv[]) {
+  assert(argc == 2);
+  auto main_config = ParseConfigFileToMap(argv[1]);
+  AssertConfigContains(main_config, "action");
+  /********************* Old results transferred to new **************/
+  std::cerr << "Parsing old results" << std::endl;
+  std::vector<std::map<string, std::map<string, int>>> old_res;
+  // Get Sejm election results, in committee -> district -> votes format.
+  if (ConfigContains(main_config, sejm_results_filename)) {
+    old_res.push_back(FromFile2019(
+        main_config[sejm_results_filename])->VoteCountsByParty());
+  }
   // Get 2020 presidential election results, same format.
-  auto results2020 = Presidential2020FromFile(results_2020_filename);
+  if (ConfigContains(main_config, presidential_results_filename)) {
+    old_res.push_back(Presidential2020FromFile(
+        main_config[presidential_results_filename]));
+  }
+  std::cerr << "Transferring votes to new committees" << std::endl;
   // Calculate unscaled 2023 results, based on the transferral config.
   // Same format.
-  auto unscaled2023 = CalculateVoteTransferral({results2019, results2020},
-                                               transferral_config);
-  if (OUTPUT_INTERIM_DATA) {
-    std::cout << "Unscaled results: " << std::endl;
-    DisplayMapOfMaps(unscaled2023);
-    VisualDivider();
-  }
+  assert(old_res.size() > 0);
+  AssertConfigContains(main_config, transferral_config);
+  auto votes = CalculateVoteTransferral(
+      old_res, main_config[transferral_config]);
 
   /*********** Scaling by population changes ****************************/
-  auto district_infos = DistrictInfoFromFile2019(district_info_filename);
+  AssertConfigContains(main_config, district_info_filename);
+  auto district_infos = DistrictInfoFromFile2019(
+      main_config[district_info_filename]);
   // PKW population data.
-  auto pkw_data = GetPkwPopulationData(pkw_citizens_filename);
-  // Get the scaling factors for population (district name -> double)
-  auto population_scaling_factors = CalculateScalingFactors(
-      DistrictsToCitizens(district_infos), pkw_data);
-  // Scale the vote counts by population changes.
-  auto popscaled2023 = ScaleVotesByDistrict(
-      unscaled2023, population_scaling_factors);
-  if (OUTPUT_INTERIM_DATA) {
-    std::cout << "Results scaled by population: " << std::endl;
-    DisplayMapOfMaps(popscaled2023);
-    VisualDivider();
+  if (ConfigContains(main_config, pkw_citizens_filename)) {
+    std::cerr << "Adjusting votes by population data" << std::endl;
+    auto pkw_data = GetPkwPopulationData(main_config[pkw_citizens_filename]);
+    // Get the scaling factors for population (district name -> double)
+    auto population_scaling_factors = CalculateScalingFactors(
+        DistrictsToCitizens(district_infos), pkw_data);
+    // Scale the vote counts by population changes.
+    votes = ScaleVotesByDistrict(votes, population_scaling_factors);
   }
 
   /************** Scaling to survey results ****************************/
-  // Scale by survey results. First, load surveys.
-  auto surveys = ParseSurvey(surveys_filename);
-  // Scale survey results, so that they sum up (roughly) to the number of
-  // votes we expect:
-  auto scaled_surveys = ScaleSingleMap(
-      surveys,
-      (double) SumMap(SumSubmaps(popscaled2023)) / (double) SumMap(surveys));
-  // Scaling factors by party - we want to bring total votes for every
-  // party to the survey values.
-  auto party_scaling_factors = CalculateScalingFactors(
-      SumSubmaps(popscaled2023), scaled_surveys);
-  // And apply the scaling factors.
-  auto scaled2023 = ScaleVotesByParty(popscaled2023, party_scaling_factors);
-  if (OUTPUT_INTERIM_DATA) {
-    std::cout << "Results scaled by population and surveys:" << std::endl;
-    DisplayMapOfMaps(scaled2023);
-    VisualDivider();
-  }
-  if (OUTPUT_INTERIM_DATA) {
-    std::cout << "Predicted election results:" << std::endl;
-    DisplayMap(AssignSeatsToParty(
-        DistrictsToSeats(district_infos), scaled2023));
-    VisualDivider();
+  if (ConfigContains(main_config, surveys_filename)) {
+    // Scale by survey results. First, load surveys.
+    std::cerr << "Adjusting votes by surveys" << std::endl;
+    auto surveys = ParseSurvey(main_config[surveys_filename]);
+    // Scale survey results, so that they sum up (roughly) to the number of
+    // votes we expect:
+    auto scaled_surveys = ScaleSingleMap(
+        surveys,
+        (double) SumMap(SumSubmaps(votes)) / (double) SumMap(surveys));
+    // Scaling factors by party - we want to bring total votes for every
+    // party to the survey values.
+    auto party_scaling_factors = CalculateScalingFactors(
+        SumSubmaps(votes), scaled_surveys);
+    // And apply the scaling factors.
+    votes = ScaleVotesByParty(votes, party_scaling_factors);
   }
 
-  /************* Calculating vote strength by interval ****************/
-  // Get the first seat policy
-  FirstSeatPolicy *first_seat_policy =
-      FirstSeatPolicyFromFile(first_seat_policy_config);
-  // Calculate vote strength by party
-  auto vote_strengths_interval = InverseVoteStrengthForAll(
-      scaled2023, DistrictsToSeats(district_infos), first_seat_policy);
-
-  /*************** Calculate vote strength by probability *************/
-  // Randomness.
-  std::random_device rd{};
-  std::mt19937 gen{rd()};
-  // Parse the stddev config.
-  Expression *vote_distribution_config =
-      PartyVoteDistributionConfig(stddev_config);
-  // Get the seat strengthsi
-  auto vote_strengths_probability = ProbabilisticSeatStrengths(
-      scaled2023, DistrictsToSeats(district_infos), repeats, gen,
-      vote_distribution_config);
-
-  /*************** Output *********************************************/
-  std::cout << std::endl << "Vote strengths by interval length" << std::endl;
-  DisplayMapOfMaps(ExpandDistrictNamesInMapOfMaps(
-      vote_strengths_interval, DistrictsToNames(district_infos))); 
-  std::cout << std::endl << "Vote strengths by probability" << std::endl;
-  DisplayMapOfMaps(ExpandDistrictNamesInMapOfMaps(
-      vote_strengths_probability, DistrictsToNames(district_infos)));
+  /************** Output vote counts, if asked for *********************/
+  auto d_names = DistrictsToNames(district_infos);
+  if (main_config[action] == "output_votes") {
+    OutputMapOfMaps(votes, main_config[output], main_config[district_names],
+                    d_names);
+  }
+  if (main_config[action] == "output_seats") {
+    OutputMap(AssignSeatsToParty(DistrictsToSeats(district_infos), votes),
+              main_config[output], main_config[district_names], d_names);
+  }
+  if (main_config[action] == "interval_strength") {
+    std::cerr << "Calculating interval-based strength" << std::endl;
+    AssertConfigContains(main_config, first_seat_policy_config);
+    FirstSeatPolicy *first_seat_policy =
+        FirstSeatPolicyFromFile(main_config[first_seat_policy_config]);
+    auto vote_strength = InverseVoteStrengthForAll(
+        votes, DistrictsToSeats(district_infos), first_seat_policy);
+    OutputMapOfMaps(vote_strength, main_config[output],
+                    main_config[district_names], d_names);
+  }
+  if (main_config[action] == "probabilistic") {
+    std::cerr << "Running probabilistic strength calculations" << std::endl;
+    std::random_device rd{};
+    std::mt19937 gen{rd()};
+    AssertConfigContains(main_config, stddev_config);
+    Expression *vote_distribution_config =
+        PartyVoteDistributionConfig(main_config[stddev_config]);
+    AssertConfigContains(main_config, repeats);
+    int num_repeats = std::atoi(main_config[repeats].c_str());
+    auto vote_strength = ProbabilisticSeatStrengths(
+        votes, DistrictsToSeats(district_infos), num_repeats, gen,
+        vote_distribution_config);
+    OutputMapOfMaps(vote_strength, main_config[output],
+                    main_config[district_names], d_names);
+  }
 }

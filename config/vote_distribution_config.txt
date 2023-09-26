@@ -20,3 +20,8 @@ T * sqrt( (V/T) * (1 - V/T) ) / 10
 
 # Scaled so that a committee with support around 10% will have an stddev
 # of 3%, which is my gut feel about what we should get.
+# (note: survey results for a committee with support around 10% - of which
+#  we have 3 - have an stddev of roughly 1.5%. Predictions from 2015 to
+#  2019 had an stddev of 1.9%. Summing this gives an stddev of ~2.4%,
+#  I think rounding up to 3% is probably fair to account for population and
+#  three weeks of drift).
