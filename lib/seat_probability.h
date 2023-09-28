@@ -70,13 +70,13 @@ long double SeatShiftProbabilityAllRandom(
 // prevent the parties on this list from gaining votes. So, if the list is
 // non-empty, we will count the vote as "gained" only if the party that
 // loses the vote is one of the rejected parties.
-std::map<std::string, std::map<std::string, int>> ProbabilisticSeatStrengths(
+std::map<std::string, std::map<std::string, double>> ProbabilisticSeatStrengths(
     const std::map<std::string, std::map<std::string, int>> &expected_votes,
     const std::map<std::string, int> &seat_counts,
     int repeats, std::mt19937 &gen, Expression *stddev,
     const std::set<std::string> &rejected_parties) {
   // Pivoted result, we'll proceed by districts.
-  std::map<std::string, std::map<std::string, int>> pivoted_res;
+  std::map<std::string, std::map<std::string, double>> pivoted_res;
   for (const auto &district_data : PivotMap(expected_votes)) {
     const std::string &district = district_data.first;
     pivoted_res[district] = {};

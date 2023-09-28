@@ -12,8 +12,9 @@ void DisplayMap(const std::map<std::string, T> &m) {
   }
 }
 
+template<typename T>
 void DisplayMapOfMaps(
-    const std::map<std::string, std::map<std::string, int>> &m) {
+    const std::map<std::string, std::map<std::string, T>> &m) {
   for (const auto &entry : m) {
     std::cout << entry.first << std::endl;
     DisplayMap(entry.second);
@@ -45,10 +46,11 @@ void CsvMapOfMaps(const std::map<std::string, std::map<std::string, T>> &m) {
 
 // Changes a map mapping district ID to integers to the same map, but the
 // key is DistrictName (ID)
-std::map<std::string, int> ExpandDistrictNamesInMap(
-    const std::map<std::string, int> &input,
+template<typename T>
+std::map<std::string, T> ExpandDistrictNamesInMap(
+    const std::map<std::string, T> &input,
     const std::map<std::string, std::string> &district_names) {
-  std::map<std::string, int> result;
+  std::map<std::string, T> result;
   for (const auto &key_value : input) {
     std::string key = key_value.first;
     result[district_names.at(key) + " (" + key + ")"] = key_value.second;
@@ -57,11 +59,12 @@ std::map<std::string, int> ExpandDistrictNamesInMap(
 }
 
 // Same operation as above, except the map is committee->district->int
-std::map<std::string, std::map<std::string, int>>
+template<typename T>
+std::map<std::string, std::map<std::string, T>>
 ExpandDistrictNamesInMapOfMaps(
-    const std::map<std::string, std::map<std::string, int>> &input,
+    const std::map<std::string, std::map<std::string, T>> &input,
     const std::map<std::string, std::string> &district_names) {
-  std::map<std::string, std::map<std::string, int>> result;
+  std::map<std::string, std::map<std::string, T>> result;
   for (const auto &key_map : input) {
     result[key_map.first] =
         ExpandDistrictNamesInMap(key_map.second, district_names);
@@ -69,8 +72,9 @@ ExpandDistrictNamesInMapOfMaps(
   return result;
 }
 
+template<typename T>
 void OutputMapOfMaps(
-    std::map<std::string, std::map<std::string, int>> map_of_maps,
+    std::map<std::string, std::map<std::string, T>> map_of_maps,
     const std::string &output_format,
     const std::string &district_names_config,
     const std::map<std::string, std::string> &district_names) {
