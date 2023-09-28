@@ -18,3 +18,5 @@ repeats = 1000000
 action = probabilistic
 district_names = expanded
 output = csv
+
+rejected_parties = Prawo i Sprawiedliwość; Konfederacja

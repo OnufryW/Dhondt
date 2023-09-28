@@ -36,6 +36,7 @@ const string district_names = "district_names";
 const string first_seat_policy_config = "first_seat_policy_config";
 const string stddev_config = "stddev_config";
 const string repeats = "repeats";
+const string rejected_parties = "rejected_parties";
 
 bool ConfigContains(const std::map<std::string, std::string> &config,
                     const std::string &key) {
@@ -127,6 +128,10 @@ int main(int argc, char *argv[]) {
   }
   if (main_config[action] == "probabilistic") {
     std::cerr << "Running probabilistic strength calculations" << std::endl;
+    std::set<std::string> rejected_parties_list;
+    if (ConfigContains(main_config, rejected_parties)) {
+      rejected_parties_list = ParseConfigList(main_config[rejected_parties]);
+    }
     std::random_device rd{};
     std::mt19937 gen{rd()};
     AssertConfigContains(main_config, stddev_config);
@@ -136,7 +141,7 @@ int main(int argc, char *argv[]) {
     int num_repeats = std::atoi(main_config[repeats].c_str());
     auto vote_strength = ProbabilisticSeatStrengths(
         votes, DistrictsToSeats(district_infos), num_repeats, gen,
-        vote_distribution_config);
+        vote_distribution_config, rejected_parties_list);
     OutputMapOfMaps(vote_strength, main_config[output],
                     main_config[district_names], d_names);
   }

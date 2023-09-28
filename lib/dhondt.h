@@ -92,9 +92,12 @@ int MinimumVotesToSeats(const std::map<std::string, int> &votes,
 // counts C such that the extra party would receive one seat more by
 // getting C votes than by getting C-1 votes.
 // Assumes our party wins tiebreakers on party name (which might be
-// inaccurate, but it will be an off-by-one error, which shouldn't matter)
-std::vector<int> KeyVoteValues(const std::map<std::string, int> &votes,
-                               int total_seats) {
+// inaccurate, but it will be an off-by-one error, which shouldn't matter).
+// If rejected_parties is non-empty, we will only list the vote values where
+// our party takes a seat from one of the rejected parties.
+std::vector<int> KeyVoteValues(
+    const std::map<std::string, int> &votes, int total_seats,
+    const std::set<std::string> &rejected_parties) {
   // The implementation is somewhat optimized. What we do is:
   // 1) Calculate the d'Hondt seat winners --- what really matters is the
   //    set of values with which a seat is won.
@@ -126,6 +129,10 @@ std::vector<int> KeyVoteValues(const std::map<std::string, int> &votes,
   // Begin from the last seat won.
   std::reverse(winners.begin(), winners.end()); 
   for (int i = 0; i < total_seats; ++i) {
+    if (rejected_parties.size() > 0 &&
+        rejected_parties.find(winners[i].party) == rejected_parties.end()) {
+      continue;
+    }
     res.push_back(
         (winners[i].votes * (i + 1) + winners[i].denominator - 1) /
             winners[i].denominator);
