@@ -12,8 +12,6 @@
 #include "map_tools.h"
 #include "party_vote_distribution.h"
 
-const double stddev_percent = 3.0;
-
 // Assume that we know the vote values for all other parties; and we know
 // that our party will have a number of votes distributed according to
 // a given distribution.

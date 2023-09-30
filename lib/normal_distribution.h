@@ -23,6 +23,10 @@ class NormalDistribution : public Distribution {
     return nd(gen);
   }
 
+  long double StdDev() {
+    return stddev;
+  }
+
  private:
   std::normal_distribution<long double> nd;
   long double mean;
