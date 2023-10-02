@@ -21,6 +21,18 @@ std::vector<std::string> ParseConfigFile(const std::string &filename) {
   return res;
 }
 
+std::set<std::string> ParseConfigList(std::string config) {
+  std::set<std::string> res;
+  while (config.find(";") != std::string::npos) {
+    auto pos = config.find(";");
+    auto entry = config.substr(0, pos);
+    res.insert(Trim(entry));
+    config = config.substr(pos + 1); Trim(config);
+  }
+  res.insert(config);
+  return res;
+}
+
 std::map<std::string, std::string> ParseConfigFileToMap(
     const std::string &filename) {
   auto parsed_to_vector = ParseConfigFile(filename);
@@ -28,10 +40,8 @@ std::map<std::string, std::string> ParseConfigFileToMap(
   for (const std::string &line : parsed_to_vector) {
     auto equals_pos = line.find("=");
     assert(equals_pos != std::string::npos);
-    std::string key = line.substr(0, equals_pos);
-    Trim(key);
-    std::string value = line.substr(equals_pos + 1);
-    Trim(value);
+    std::string key = line.substr(0, equals_pos); Trim(key);
+    std::string value = line.substr(equals_pos + 1); Trim(value);
     res[key] = value;
   }
   return res;

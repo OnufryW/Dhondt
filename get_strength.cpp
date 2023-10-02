@@ -15,6 +15,7 @@
 #include "lib/first_seat_policy.h"
 #include "lib/vote_strength_by_dhondt_interval.h"
 #include "lib/assign_seats_to_party.h"
+#include "lib/vote_position.h"
 #include "lib/party_vote_distribution.h"
 #include "lib/seat_probability.h"
 #include "lib/output_map.h"
@@ -36,6 +37,7 @@ const string district_names = "district_names";
 const string first_seat_policy_config = "first_seat_policy_config";
 const string stddev_config = "stddev_config";
 const string repeats = "repeats";
+const string rejected_parties = "rejected_parties";
 
 bool ConfigContains(const std::map<std::string, std::string> &config,
                     const std::string &key) {
@@ -107,13 +109,41 @@ int main(int argc, char *argv[]) {
 
   /************** Output vote counts, if asked for *********************/
   auto d_names = DistrictsToNames(district_infos);
+  auto d_seats = DistrictsToSeats(district_infos);
   if (main_config[action] == "output_votes") {
     OutputMapOfMaps(votes, main_config[output], main_config[district_names],
                     d_names);
   }
   if (main_config[action] == "output_seats") {
-    OutputMap(AssignSeatsToParty(DistrictsToSeats(district_infos), votes),
+    OutputMap(AssignSeatsToParty(d_seats, votes),
               main_config[output], main_config[district_names], d_names);
+  }
+  if (main_config[action] == "output_votes_per_seat") {
+    OutputMap(
+        DivideMaps(SumSubmaps(PivotMap(votes)), d_seats),
+        main_config[output], main_config[district_names], d_names);
+  }
+  if (main_config[action] == "output_vote_percentages") {
+    OutputMapOfMaps(VoteFraction(votes), main_config[output],
+                    main_config[district_names], d_names);
+  }
+  if (main_config[action] == "output_votes_to_next_seat") {
+    OutputMapOfMaps(VotesToNextSeat(votes, d_seats), main_config[output],
+                    main_config[district_names], d_names);
+  }
+  if (main_config[action] == "output_votes_to_previous_seat") {
+    OutputMapOfMaps(VotesToPreviousSeat(votes, d_seats),
+                    main_config[output],
+                    main_config[district_names], d_names);   
+  }
+  if (main_config[action] == "output_stddev") {
+    AssertConfigContains(main_config, stddev_config);
+    Expression *vote_distribution_config =
+        PartyVoteDistributionConfig(main_config[stddev_config]); 
+    OutputMapOfMaps(MapOfStddev(votes, vote_distribution_config),
+                    main_config[output], main_config[district_names],
+                    d_names);
+
   }
   if (main_config[action] == "interval_strength") {
     std::cerr << "Calculating interval-based strength" << std::endl;
@@ -121,12 +151,16 @@ int main(int argc, char *argv[]) {
     FirstSeatPolicy *first_seat_policy =
         FirstSeatPolicyFromFile(main_config[first_seat_policy_config]);
     auto vote_strength = InverseVoteStrengthForAll(
-        votes, DistrictsToSeats(district_infos), first_seat_policy);
+        votes, d_seats, first_seat_policy);
     OutputMapOfMaps(vote_strength, main_config[output],
                     main_config[district_names], d_names);
   }
   if (main_config[action] == "probabilistic") {
     std::cerr << "Running probabilistic strength calculations" << std::endl;
+    std::set<std::string> rejected_parties_list;
+    if (ConfigContains(main_config, rejected_parties)) {
+      rejected_parties_list = ParseConfigList(main_config[rejected_parties]);
+    }
     std::random_device rd{};
     std::mt19937 gen{rd()};
     AssertConfigContains(main_config, stddev_config);
@@ -135,8 +169,8 @@ int main(int argc, char *argv[]) {
     AssertConfigContains(main_config, repeats);
     int num_repeats = std::atoi(main_config[repeats].c_str());
     auto vote_strength = ProbabilisticSeatStrengths(
-        votes, DistrictsToSeats(district_infos), num_repeats, gen,
-        vote_distribution_config);
+        votes, d_seats, num_repeats, gen,
+        vote_distribution_config, rejected_parties_list);
     OutputMapOfMaps(vote_strength, main_config[output],
                     main_config[district_names], d_names);
   }

@@ -43,4 +43,14 @@ std::map<K1, T> SumSubmaps(const std::map<K1, std::map<K2, T>> &source) {
   return result;
 }
 
+// Take two maps x -> a and x -> b, return a map of x -> a / b
+template<typename K, typename T> std::map<K, T> DivideMaps(
+    const std::map<K, T> &A, const std::map<K, T> &B) {
+  std::map<K, T> result;
+  for (const auto &entry : A) {
+    result[entry.first] = entry.second / B.at(entry.first);
+  }
+  return result;
+}
+
 #endif // MAP_TOOLS
