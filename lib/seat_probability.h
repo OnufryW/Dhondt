@@ -20,20 +20,22 @@
 // increase by more).
 long double SeatShiftProbability(
     const std::map<std::string, int> &votes,
-    int total_seats, Distribution &our_votes,
+    int total_seats, int vote_number_delta, Distribution &our_votes,
     const std::set<std::string> &rejected_parties) {
   long double res = 0;
   std::vector<int> key_values =
       KeyVoteValues(votes, total_seats, rejected_parties);
   for (int val : key_values) {
-    res += our_votes.CdfAt(val) - our_votes.CdfAt(val - 1);
+    res += our_votes.CdfAt(val)
+         - our_votes.CdfAt(val - vote_number_delta);
   }
   return res;
 }
 
 long double SeatShiftProbabilityAllRandom(
     const std::map<std::string, int> &votes, int total_seats,
-    std::string party, int repeats, std::mt19937 &gen, Expression *stddev,
+    std::string party, int vote_number_delta, int repeats,
+    std::mt19937 &gen, Expression *stddev,
     const std::set<std::string> &rejected_parties) {
   std::vector<long double> results;
   std::map<std::string, Distribution*> distributions;
@@ -49,7 +51,8 @@ long double SeatShiftProbabilityAllRandom(
           std::round(distributions[p.first]->Draw(gen)), 1.L);
     }
     results.push_back(SeatShiftProbability(
-        random_votes, total_seats, *distributions[party], rejected_parties));
+        random_votes, total_seats, vote_number_delta, *distributions[party],
+        rejected_parties));
   }
   unsigned i = 0;
   // Adding all the results, bottom up, to avoid rounding errors.
@@ -71,9 +74,13 @@ long double SeatShiftProbabilityAllRandom(
 std::map<std::string, std::map<std::string, double>> ProbabilisticSeatStrengths(
     const std::map<std::string, std::map<std::string, int>> &expected_votes,
     const std::map<std::string, int> &seat_counts,
-    int repeats, std::mt19937 &gen, Expression *stddev,
-    const std::set<std::string> &rejected_parties) {
-  // Pivoted result, we'll proceed by districts.
+    int repeats, std::mt19937 &gen, int vote_number_delta,
+    Expression *stddev, const std::set<std::string> &rejected_parties) {
+  // Pivoted result, we'll proceed by districts
+  std::cerr << "PSS RP: " << std::endl;
+  for (const auto &p : rejected_parties) {
+    std::cerr << p << std::endl;
+  }
   std::map<std::string, std::map<std::string, double>> pivoted_res;
   for (const auto &district_data : PivotMap(expected_votes)) {
     const std::string &district = district_data.first;
@@ -85,7 +92,7 @@ std::map<std::string, std::map<std::string, double>> ProbabilisticSeatStrengths(
       }
       long double prob = SeatShiftProbabilityAllRandom(
           district_data.second, seat_counts.at(district), committee,
-          repeats, gen, stddev, rejected_parties);
+          vote_number_delta, repeats, gen, stddev, rejected_parties);
       pivoted_res[district][committee] = 1000000 * prob;
     }
   }

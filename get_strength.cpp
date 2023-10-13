@@ -38,6 +38,7 @@ const string first_seat_policy_config = "first_seat_policy_config";
 const string stddev_config = "stddev_config";
 const string repeats = "repeats";
 const string rejected_parties = "rejected_parties";
+const string vote_number_delta = "vote_number_delta";
 
 bool ConfigContains(const std::map<std::string, std::string> &config,
                     const std::string &key) {
@@ -168,8 +169,14 @@ int main(int argc, char *argv[]) {
         PartyVoteDistributionConfig(main_config[stddev_config]);
     AssertConfigContains(main_config, repeats);
     int num_repeats = std::atoi(main_config[repeats].c_str());
+    int vote_number_delta_val = 1;
+    if (ConfigContains(main_config, vote_number_delta)) {
+      vote_number_delta_val = std::atoi(
+          main_config[vote_number_delta].c_str());
+    }
+    std::cerr << "VND: " << vote_number_delta_val << std::endl;
     auto vote_strength = ProbabilisticSeatStrengths(
-        votes, d_seats, num_repeats, gen,
+        votes, d_seats, num_repeats, gen, vote_number_delta_val,
         vote_distribution_config, rejected_parties_list);
     OutputMapOfMaps(vote_strength, main_config[output],
                     main_config[district_names], d_names);
