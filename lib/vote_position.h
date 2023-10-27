@@ -5,7 +5,6 @@
 #include <string>
 #include "map_tools.h"
 #include "dhondt.h"
-#include "party_vote_distribution.h"
 
 std::map<std::string, std::map<std::string, double>> VoteFraction(
     const std::map<std::string, std::map<std::string, int>> &votes) {
@@ -19,6 +18,19 @@ std::map<std::string, std::map<std::string, double>> VoteFraction(
       res[committee][district] = (double) district_data.second /
           (double) total_votes_per_district[district];
     }
+  }
+  return res;
+}
+
+std::map<std::string, std::string> LastSeatWinner(
+    const std::map<std::string, std::map<std::string, int>> &votes,
+    const std::map<std::string, int> &seat_counts) {
+  std::map<std::string, std::string> res;
+  auto by_district = PivotMap(votes);
+  for (const auto &district_data : by_district) {
+    int seats = seat_counts.at(district_data.first);
+    res[district_data.first] =
+        LastSeatWinnerInDistrict(district_data.second, seats);
   }
   return res;
 }
@@ -74,23 +86,4 @@ std::map<std::string, std::map<std::string, int>> VotesToPreviousSeat(
   return PivotMap(pivoted_res);
 }
 
-std::map<std::string, std::map<std::string, double>> MapOfStddev(
-    const std::map<std::string, std::map<std::string, int>> &votes,
-    Expression *vote_distribution_config) {
-  std::map<std::string, std::map<std::string, double>> p_res;
-  auto by_district = PivotMap(votes);
-  for (auto &district_data : by_district) {
-    const auto &district = district_data.first;
-    p_res[district] = {};
-    int total_votes = SumMap(district_data.second);
-    for (const auto &committee_data : district_data.second) {
-      p_res[district][committee_data.first] =
-          GetPartyVoteDistribution(
-              committee_data.second, total_votes, vote_distribution_config)
-                  ->StdDev();
-              
-    }
-  }
-  return PivotMap(p_res);
-}
 #endif // VOTE_POSITION

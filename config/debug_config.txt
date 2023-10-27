@@ -4,19 +4,20 @@ sejm_results_filename = data_2019_sejm/wyniki_sejm.csv
 presidential_results_filename = data_2020_president/prezydenckie.csv
 district_info_filename = data_2019_sejm/okregi_sejm.csv
 pkw_citizens_filename = data_2019_sejm/dane_z_listu_pkw.csv
-surveys_filename = data_2019_sejm/sondaze.csv
+multi_surveys_filename = data_2019_sejm/multi_survey.csv
 
 # Other configs
 
 transferral_config = config/vote_transferral_policy.txt
-stddev_config = config/vote_distribution_config.txt
-
-repeats = 1000000
+extra_survey_stddev = config/extra_stddev_config.txt
+stddev_config = config/base_stddev_2.txt
 
 # What to actually do
 
-action = output_stddev
+action = probabilistic
+repeats = 1000000
+vote_number_delta = 500
 district_names = expanded
-output = stdout
+output = csv
 
-# rejected_parties = Prawo i Sprawiedliwość; Konfederacja
+rejected_parties = Prawo i Sprawiedliwość; Konfederacja

@@ -19,6 +19,10 @@
 #include "lib/party_vote_distribution.h"
 #include "lib/seat_probability.h"
 #include "lib/output_map.h"
+#include "lib/stddev_calculations.h"
+#include "lib/strategy.h"
+#include "lib/resolve_strategy.h"
+#include "lib/strategy_seat_changes.h"
 
 using std::string;
 
@@ -33,12 +37,20 @@ const string sejm_results_filename = "sejm_results_filename";
 const string presidential_results_filename = "presidential_results_filename";
 const string pkw_citizens_filename = "pkw_citizens_filename";
 const string surveys_filename = "surveys_filename";
+const string multi_surveys_filename = "multi_surveys_filename";
 const string district_names = "district_names";
 const string first_seat_policy_config = "first_seat_policy_config";
 const string stddev_config = "stddev_config";
 const string repeats = "repeats";
 const string rejected_parties = "rejected_parties";
 const string vote_number_delta = "vote_number_delta";
+const string hardcoded_stddevs = "hardcoded_stddevs";
+const string extra_survey_stddev = "extra_survey_stddev";
+const string data_year = "data_year";
+const string strategy_config = "strategy";
+const string strategy_min_voters_config = "strategy_min_voters";
+const string strategy_max_voters_config = "strategy_max_voters";
+const string strategy_aggregation_config = "strategy_aggregation";
 
 bool ConfigContains(const std::map<std::string, std::string> &config,
                     const std::string &key) {
@@ -49,6 +61,21 @@ void AssertConfigContains(const std::map<std::string, std::string> &config,
                           const std::string &key) {
   assert(ConfigContains(config, key));
 }
+
+std::string AssertGetConfigValue(
+    const std::map<std::string, std::string> &config,
+    const std::string &key) {
+  AssertConfigContains(config, key);
+  return config.at(key);
+}
+
+int AssertGetIntConfigValue(
+    const std::map<std::string, std::string> &config,
+    const std::string &key) {
+  return std::atoi(AssertGetConfigValue(config, key).c_str());
+}
+
+
 
 int main(int argc, char *argv[]) {
   assert(argc == 2);
@@ -71,14 +98,17 @@ int main(int argc, char *argv[]) {
   // Calculate unscaled 2023 results, based on the transferral config.
   // Same format.
   assert(old_res.size() > 0);
-  AssertConfigContains(main_config, transferral_config);
   auto votes = CalculateVoteTransferral(
-      old_res, main_config[transferral_config]);
+      old_res, AssertGetConfigValue(main_config, transferral_config));
 
   /*********** Scaling by population changes ****************************/
-  AssertConfigContains(main_config, district_info_filename);
+  int data_year_int = 2019;
+  if (ConfigContains(main_config, data_year)) {
+    data_year_int = AssertGetIntConfigValue(main_config, data_year);
+  }
   auto district_infos = DistrictInfoFromFile2019(
-      main_config[district_info_filename]);
+      AssertGetConfigValue(main_config, district_info_filename),
+      data_year_int);
   // PKW population data.
   if (ConfigContains(main_config, pkw_citizens_filename)) {
     std::cerr << "Adjusting votes by population data" << std::endl;
@@ -88,6 +118,15 @@ int main(int argc, char *argv[]) {
         DistrictsToCitizens(district_infos), pkw_data);
     // Scale the vote counts by population changes.
     votes = ScaleVotesByDistrict(votes, population_scaling_factors);
+  }
+
+  /************** Prepare the map of stddevs, to accumulate into *******/
+  std::map<std::string, std::map<std::string, double>> stddevs;
+  for (const auto &entry : votes) {
+    stddevs[entry.first] = {};
+    for (const auto &sub_entry : entry.second) {
+      stddevs[entry.first][sub_entry.first] = 0;
+    }
   }
 
   /************** Scaling to survey results ****************************/
@@ -105,9 +144,49 @@ int main(int argc, char *argv[]) {
     auto party_scaling_factors = CalculateScalingFactors(
         SumSubmaps(votes), scaled_surveys);
     // And apply the scaling factors.
-    votes = ScaleVotesByParty(votes, party_scaling_factors);
+    votes = ScaleByParty(votes, party_scaling_factors);
+  } else if (ConfigContains(main_config, multi_surveys_filename)) {
+    std::cerr << "Collecting multi-survey data" << std::endl;
+    auto surveys = ParseSurveys(main_config[multi_surveys_filename]);
+    auto expected_values = SurveyExpectedValues(surveys);
+    Expression *extra_survey_stddev_expr = ExtraSurveyStdDevConfig(
+        AssertGetConfigValue(main_config, extra_survey_stddev));
+    auto survey_stddevs = SurveyStdDevs(surveys, expected_values,
+                                        extra_survey_stddev_expr);
+    // Both the expected values and the stddevs are expressed in units of
+    // thousandth of a percent. We need to scale the stddevs to be in
+    // fractions of the expected value. This will then translate to stddevs
+    // being in fractions of votes once we scale; and allow us to calculate
+    // per-party per-district stddevs.
+    for (auto &entry : survey_stddevs) {
+      entry.second /= expected_values[entry.first];
+    }  // Now it's unitless.
+    // Scale the expected values to be roughly sum up to the total number
+    // of votes.
+    auto scaled_exp_values = ScaleSingleMap(expected_values,
+        (double) SumMap(SumSubmaps(votes)) / (double) SumMap(expected_values));
+    auto party_scaling_factors = CalculateScalingFactors(
+        SumSubmaps(votes), scaled_exp_values);
+    votes = ScaleByParty(votes, party_scaling_factors);
+    // Now, stddevs should be votes * survey_stddevs
+    auto party_district_stddevs = ScaleByParty(
+        CastMapOfMaps<int, double>(votes), survey_stddevs);
+    stddevs = AccumulateStdDev(stddevs, party_district_stddevs);
   }
 
+  if (ConfigContains(main_config, stddev_config)) {
+    Expression *vote_distribution_config =
+        PartyVoteDistributionConfig(main_config[stddev_config]); 
+    stddevs = AccumulateStdDev(
+        stddevs, StdDevFromConfig(votes, vote_distribution_config));
+  }
+
+  if (ConfigContains(main_config, hardcoded_stddevs)) {
+    stddevs = AccumulateStdDev(
+        stddevs, HardcodedStddev(main_config[hardcoded_stddevs]));
+  }
+
+  std::cerr << "Reading data done" << std::endl;
   /************** Output vote counts, if asked for *********************/
   auto d_names = DistrictsToNames(district_infos);
   auto d_seats = DistrictsToSeats(district_infos);
@@ -116,8 +195,10 @@ int main(int argc, char *argv[]) {
                     d_names);
   }
   if (main_config[action] == "output_seats") {
+    // The key here isn't the district name, so expanding district names
+    // makes zero sense.
     OutputMap(AssignSeatsToParty(d_seats, votes),
-              main_config[output], main_config[district_names], d_names);
+              main_config[output], "", {});
   }
   if (main_config[action] == "output_votes_per_seat") {
     OutputMap(
@@ -137,14 +218,42 @@ int main(int argc, char *argv[]) {
                     main_config[output],
                     main_config[district_names], d_names);   
   }
+  if (main_config[action] == "output_last_seat_winner") {
+    OutputMap(LastSeatWinner(votes, d_seats), main_config[output],
+              main_config[district_names], d_names);
+  }
+  if (main_config[action] == "output_apply_strategy") {
+    Strategy *strategy = ResolveStrategy(
+        AssertGetConfigValue(main_config, strategy_config));
+    int min_voters =
+        AssertGetIntConfigValue(main_config, strategy_min_voters_config);
+    int max_voters =
+        AssertGetIntConfigValue(main_config, strategy_max_voters_config);
+    AssertConfigContains(main_config, strategy_aggregation_config);
+    int repeats_cnt =
+        AssertGetIntConfigValue(main_config, repeats);
+    std::set<std::string> rejected_parties_list;
+    if (ConfigContains(main_config, rejected_parties)) {
+      rejected_parties_list = ParseConfigList(main_config[rejected_parties]);
+    }
+    std::random_device rd{};
+    std::mt19937 gen{rd()};
+    std::cerr << "Getting strategy results" << std::endl;
+    auto strategy_results = CheckStrategyResults(
+        votes, d_seats, *strategy, rejected_parties_list, min_voters, max_voters,
+        repeats_cnt, gen);
+    if (main_config[strategy_aggregation_config] == "by_district") {
+      OutputMapOfMaps(strategy_results, main_config[output],
+                      main_config[district_names], d_names);
+    } else {
+      assert(main_config[strategy_aggregation_config] == "aggregate");
+      OutputMap(SumSubmaps(strategy_results), main_config[output], "", {});
+    }
+  }
   if (main_config[action] == "output_stddev") {
-    AssertConfigContains(main_config, stddev_config);
-    Expression *vote_distribution_config =
-        PartyVoteDistributionConfig(main_config[stddev_config]); 
-    OutputMapOfMaps(MapOfStddev(votes, vote_distribution_config),
+    OutputMapOfMaps(stddevs,
                     main_config[output], main_config[district_names],
                     d_names);
-
   }
   if (main_config[action] == "interval_strength") {
     std::cerr << "Calculating interval-based strength" << std::endl;
@@ -164,9 +273,6 @@ int main(int argc, char *argv[]) {
     }
     std::random_device rd{};
     std::mt19937 gen{rd()};
-    AssertConfigContains(main_config, stddev_config);
-    Expression *vote_distribution_config =
-        PartyVoteDistributionConfig(main_config[stddev_config]);
     AssertConfigContains(main_config, repeats);
     int num_repeats = std::atoi(main_config[repeats].c_str());
     int vote_number_delta_val = 1;
@@ -177,7 +283,7 @@ int main(int argc, char *argv[]) {
     std::cerr << "VND: " << vote_number_delta_val << std::endl;
     auto vote_strength = ProbabilisticSeatStrengths(
         votes, d_seats, num_repeats, gen, vote_number_delta_val,
-        vote_distribution_config, rejected_parties_list);
+        stddevs, rejected_parties_list);
     OutputMapOfMaps(vote_strength, main_config[output],
                     main_config[district_names], d_names);
   }

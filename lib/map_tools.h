@@ -25,8 +25,9 @@ PivotMap(const std::map<K1, std::map<K2, T>> &source) {
   return result;
 }
 
-int SumMap(const std::map<std::string, int> &source) {
-  int res = 0;
+template<typename T>
+T SumMap(const std::map<std::string, T> &source) {
+  T res = 0;
   for (const auto &key_value : source) {
     res += key_value.second;
   }
@@ -51,6 +52,25 @@ template<typename K, typename T> std::map<K, T> DivideMaps(
     result[entry.first] = entry.second / B.at(entry.first);
   }
   return result;
+}
+
+template<typename From, typename To>
+std::map<std::string, To> CastMap(const std::map<std::string, From> &M) {
+  std::map<std::string, To> res;
+  for (const auto &entry : M) {
+    res[entry.first] = (To) entry.second;
+  }
+  return res;
+}
+
+template<typename From, typename To>
+std::map<std::string, std::map<std::string, To>> CastMapOfMaps(
+    const std::map<std::string, std::map<std::string, From>> &M) {
+  std::map<std::string, std::map<std::string, To>> res;
+  for (const auto &entry : M) {
+    res[entry.first] = CastMap<From, To>(entry.second);
+  }
+  return res;
 }
 
 #endif // MAP_TOOLS

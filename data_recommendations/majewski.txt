@@ -1,0 +1,14 @@
+"Lewica";12;14
+"Lewica";15;14
+"Lewica";22;23
+"Lewica";17;10;16
+"Lewica";20;16;20
+"Koalicja Obywatelska";19;18;17;20
+"Koalicja Obywatelska";13;15
+"Koalicja Obywatelska";4;37
+"Koalicja Obywatelska";5;37
+"Trzecia Droga";39;38
+"Trzecia Droga";40;38
+"Trzecia Droga";36;11
+"Trzecia Droga";37;11
+"Trzecia Droga";20;16;18

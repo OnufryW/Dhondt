@@ -15,9 +15,9 @@ repeats = 100000
 
 # What to actually do
 
-action = probabilistic
+action = output_stddev
 district_names = expanded
-output = csv
+output = stdout
 vote_number_delta = 1000
 
 rejected_parties = Prawo i Sprawiedliwość; Konfederacja

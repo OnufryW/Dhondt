@@ -55,6 +55,28 @@ std::map<std::string, int> VotesToSeats(
   return result;
 }
 
+std::string LastSeatWinnerInDistrict(
+    const std::map<std::string, int> &votes, int total_seats) {
+  std::priority_queue<
+      vote_candidate, std::vector<vote_candidate>, Compare> VC;
+  for (auto &V : votes) {
+    vote_candidate cand;
+    cand.party = V.first;
+    cand.votes = V.second;
+    cand.denominator = 1;
+    VC.push(cand);
+  }
+  std::string result;
+  for (int i = 0; i < total_seats; ++i) {
+    auto cand = VC.top();
+    result = cand.party;
+    VC.pop();
+    cand.denominator += 1;
+    VC.push(cand);
+  }
+  return result;
+}
+
 // Takes vote counts (map from party name to number of votes), missing one
 // party, and the total number of seats; plus a number k (between 1 and
 // the number of seats, inclusive. Determines the number of votes V that

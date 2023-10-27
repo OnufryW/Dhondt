@@ -1,0 +1,14 @@
+# This is the extra stddev we plonk on to the averaged survey results, to
+# account for the fact that we expect there to be correlated errors between
+# surveys (e.g., due to time passing, people lying to surveyors, or
+# correlated biases in the sampled groups.
+#
+# The unit is 1000 * percent (for somewhat dumb reasons), and the input E
+# is the expected value of the vote for the party.
+#
+# The value below is 1% (that is, we expect to be off by one percentage
+# point from the averaged survey results, outside of what the surveys
+# themselves vary by.
+
+1000
+

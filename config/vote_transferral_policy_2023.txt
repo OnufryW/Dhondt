@@ -1,0 +1,19 @@
+# This config describes how to translate vote counts in previous elections
+# (on a set of parties that is different than the one in the current
+# election) to vote counts in this election.
+# It generally follows the pattern of
+# Foo = 0.5 * Baz + 0.3 * Bar + 0.2 * Qux
+# Where "Foo" is a name of a party in the current election, and
+# Baz, Bar and Qux are suffixes or prefixes of names of parties / 
+# candidates in previous elections.
+# The formula is applied without any scaling, either with respect to
+# survey results or to population count changes, it's just applied as-is.
+
+# We could also add some data from the presidential election, but, meh...
+
+Lewica = "NOWA LEWICA"
+Koalicja Obywatelska = "IPL ZIELONI"
+Konfederacja = "NIEPODLEGŁOŚĆ"
+Mniejszość Niemiecka = "MNIEJSZOŚĆ NIEMIECKA"
+Prawo i Sprawiedliwość =  "SPRAWIEDLIWOŚĆ"
+Trzecia Droga = "STRONNICTWO LUDOWE"

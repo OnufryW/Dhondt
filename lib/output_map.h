@@ -93,8 +93,9 @@ void OutputMapOfMaps(
   }
 }
 
+template<typename T>
 void OutputMap(
-    std::map<std::string, int> mp, const std::string &output_format,
+    std::map<std::string, T> mp, const std::string &output_format,
     const std::string &district_names_config,
     const std::map<std::string, std::string> &district_names) {
   if (district_names_config == "expanded") {

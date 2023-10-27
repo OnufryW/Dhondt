@@ -35,14 +35,13 @@ long double SeatShiftProbability(
 long double SeatShiftProbabilityAllRandom(
     const std::map<std::string, int> &votes, int total_seats,
     std::string party, int vote_number_delta, int repeats,
-    std::mt19937 &gen, Expression *stddev,
+    std::mt19937 &gen, const std::map<std::string, double> &stddevs,
     const std::set<std::string> &rejected_parties) {
   std::vector<long double> results;
   std::map<std::string, Distribution*> distributions;
-  long long total_votes = SumMap(votes);
   for (const auto &p: votes) {
     distributions[p.first] =
-        GetPartyVoteDistribution(p.second, total_votes, stddev);
+        new NormalDistribution(p.second, stddevs.at(p.first));
   }
   for (int r = 0; r < repeats; r++) {
     std::map<std::string, int> random_votes;
@@ -75,13 +74,11 @@ std::map<std::string, std::map<std::string, double>> ProbabilisticSeatStrengths(
     const std::map<std::string, std::map<std::string, int>> &expected_votes,
     const std::map<std::string, int> &seat_counts,
     int repeats, std::mt19937 &gen, int vote_number_delta,
-    Expression *stddev, const std::set<std::string> &rejected_parties) {
+    const std::map<std::string, std::map<std::string, double>> &stddevs,
+    const std::set<std::string> &rejected_parties) {
   // Pivoted result, we'll proceed by districts
-  std::cerr << "PSS RP: " << std::endl;
-  for (const auto &p : rejected_parties) {
-    std::cerr << p << std::endl;
-  }
   std::map<std::string, std::map<std::string, double>> pivoted_res;
+  auto pivoted_stddevs = PivotMap(stddevs);
   for (const auto &district_data : PivotMap(expected_votes)) {
     const std::string &district = district_data.first;
     pivoted_res[district] = {};
@@ -92,7 +89,8 @@ std::map<std::string, std::map<std::string, double>> ProbabilisticSeatStrengths(
       }
       long double prob = SeatShiftProbabilityAllRandom(
           district_data.second, seat_counts.at(district), committee,
-          vote_number_delta, repeats, gen, stddev, rejected_parties);
+          vote_number_delta, repeats, gen, pivoted_stddevs[district],
+          rejected_parties);
       pivoted_res[district][committee] = 1000000 * prob;
     }
   }

@@ -20,7 +20,7 @@ void test_scale_party(
     const std::map<std::string, std::map<std::string, int>> &expected,
     const std::string &description) {
   std::cout << "[ RUNNING ] " << "Scale party " << description << std::endl;
-  auto res = ScaleVotesByParty(source, scaling_factors);
+  auto res = ScaleByParty(source, scaling_factors);
   assert_eq_map_of_maps(expected, res);
   std::cout << "[ OK ]" << std::endl;
 }
