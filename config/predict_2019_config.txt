@@ -1,0 +1,10 @@
+# File configs
+
+sejm_results_filename = data_2019_sejm/2015-gl-lis-okr.csv
+district_info_filename = data_2019_sejm/okregi_sejm.csv
+surveys_filename = data_2019_sejm/fake_survey_2019.txt
+transferral_config = config/vote_transferrals_2015.txt
+
+action = output_votes
+district_names = expanded
+output = csv

@@ -2,15 +2,15 @@
 #define SEAT_PROBABILITY
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 #include <random>
 #include <cmath>
 #include "dhondt.h"
 #include "distribution.h"
-#include "normal_distribution.h"
-
-const double stddev_percent = 3.0;
+#include "map_tools.h"
+#include "party_vote_distribution.h"
 
 // Assume that we know the vote values for all other parties; and we know
 // that our party will have a number of votes distributed according to
@@ -18,37 +18,40 @@ const double stddev_percent = 3.0;
 // Calculates the probability that adding one vote to our party would
 // increase the number of seats it gets (by 1, under sane conditions it won't
 // increase by more).
-long double SeatShiftProbability(const std::map<std::string, int> &votes,
-                                 int total_seats, Distribution &our_votes) {
+long double SeatShiftProbability(
+    const std::map<std::string, int> &votes,
+    int total_seats, int vote_number_delta, Distribution &our_votes,
+    const std::set<std::string> &rejected_parties) {
   long double res = 0;
-  std::vector<int> key_values = KeyVoteValues(votes, total_seats);
+  std::vector<int> key_values =
+      KeyVoteValues(votes, total_seats, rejected_parties);
   for (int val : key_values) {
-    res += our_votes.CdfAt(val + 1) - our_votes.CdfAt(val);
+    res += our_votes.CdfAt(val)
+         - our_votes.CdfAt(val - vote_number_delta);
   }
   return res;
 }
 
 long double SeatShiftProbabilityAllRandom(
     const std::map<std::string, int> &votes, int total_seats,
-    std::string party, int repeats, std::mt19937 &gen) {
+    std::string party, int vote_number_delta, int repeats,
+    std::mt19937 &gen, const std::map<std::string, double> &stddevs,
+    const std::set<std::string> &rejected_parties) {
   std::vector<long double> results;
   std::map<std::string, Distribution*> distributions;
-  long long total_votes = 0;
   for (const auto &p: votes) {
-    total_votes += p.second;
-  }
-  for (const auto &p: votes) {
-    distributions[p.first] = new NormalDistribution(
-        p.second, total_votes * stddev_percent / 100);
+    distributions[p.first] =
+        new NormalDistribution(p.second, stddevs.at(p.first));
   }
   for (int r = 0; r < repeats; r++) {
     std::map<std::string, int> random_votes;
-    for (const auto& p : votes) if (p.first != party) {
+    for (const auto &p : votes) if (p.first != party) {
       random_votes[p.first] = std::max(
           std::round(distributions[p.first]->Draw(gen)), 1.L);
     }
     results.push_back(SeatShiftProbability(
-        random_votes, total_seats, *distributions[party]));
+        random_votes, total_seats, vote_number_delta, *distributions[party],
+        rejected_parties));
   }
   unsigned i = 0;
   // Adding all the results, bottom up, to avoid rounding errors.
@@ -58,5 +61,40 @@ long double SeatShiftProbabilityAllRandom(
   }
   return results[i] / repeats;
 }
+
+// Input is the standard committee -> district -> expected votes map,
+// a map from districts to seat counts, the number of repeats in each
+// district, a random generator, and the expression for generating the
+// stddev.
+// We also take a list of rejected parties. The idea is that we want to
+// prevent the parties on this list from gaining votes. So, if the list is
+// non-empty, we will count the vote as "gained" only if the party that
+// loses the vote is one of the rejected parties.
+std::map<std::string, std::map<std::string, double>> ProbabilisticSeatStrengths(
+    const std::map<std::string, std::map<std::string, int>> &expected_votes,
+    const std::map<std::string, int> &seat_counts,
+    int repeats, std::mt19937 &gen, int vote_number_delta,
+    const std::map<std::string, std::map<std::string, double>> &stddevs,
+    const std::set<std::string> &rejected_parties) {
+  // Pivoted result, we'll proceed by districts
+  std::map<std::string, std::map<std::string, double>> pivoted_res;
+  auto pivoted_stddevs = PivotMap(stddevs);
+  for (const auto &district_data : PivotMap(expected_votes)) {
+    const std::string &district = district_data.first;
+    pivoted_res[district] = {};
+    for (const auto &committee_data : district_data.second) {
+      const std::string &committee = committee_data.first;
+      if (rejected_parties.find(committee) != rejected_parties.end()) {
+        continue;
+      }
+      long double prob = SeatShiftProbabilityAllRandom(
+          district_data.second, seat_counts.at(district), committee,
+          vote_number_delta, repeats, gen, pivoted_stddevs[district],
+          rejected_parties);
+      pivoted_res[district][committee] = 1000000 * prob;
+    }
+  }
+  return PivotMap(pivoted_res);
+}  
 
 #endif // SEAT_PROBABILITY

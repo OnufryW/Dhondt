@@ -1,0 +1,7 @@
+Lewica = "6 - " + "3 - "
+Koalicja Obywatelska = "2 - " + "8 - "
+Konfederacja = "4 - "
+# The data is wonky, it has two "16 - " committees (?)
+Mniejszość Niemiecka = "Niemiecka"
+Prawo i Sprawiedliwość = "1 - "
+PSL = "5 - "

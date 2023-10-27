@@ -5,6 +5,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <functional>
 
 // Tries to assign seats to districts according to specified weights.
 // Takes a map from district code to weight, and the total number of
@@ -19,29 +20,30 @@
 //    4 seats to distribute, both will get 2).
 // 4) The following tiebreakers are the total weight, and the code.
 std::map<std::string, int> AssignSeatsToDistricts(
-    const std::map<std::string, int> &weights, int total_seats) {
-  long long total_value = 0;
+    const std::map<std::string, int> &weights, long long total_seats) {
+  long long total_weights = 0;
   for (const auto &d : weights) {
-    total_value += d.second;
+    total_weights += d.second;
   }
   std::map<std::string, int> res;
   int assigned = 0;
   // Vector of (remainder, (original weight, district code))
   std::vector<std::pair<int, std::pair<int, std::string>>> remainders;
   for (const auto &d : weights) {
-    long long base = (total_seats * d.second) / total_value;
+    long long base = (total_seats * d.second) / total_weights;
     res[d.first] = base;
     assigned += base;
-    long long remainder = (total_seats * d.second) - base * total_value;
+    long long remainder = (total_seats * d.second) % total_weights;
     remainders.push_back(
         make_pair(remainder, make_pair(d.second, d.first)));
   }
-  sort(remainders.begin(), remainders.end());
-  int curr = remainders.size() - 1;
-  while (assigned < total_seats) {
-    res[remainders[curr].second.second] += 1;
+  // The sort order is (remainder, original weight, district code), see #4
+  // in the function comment.
+  sort(remainders.begin(), remainders.end(),
+      std::greater<std::pair<int, std::pair<int, std::string>>>());
+  for (int i = 0; assigned < total_seats; i++) {
+    res[remainders[i].second.second] += 1;
     assigned += 1;
-    curr -= 1;
   }
   return res;
 }

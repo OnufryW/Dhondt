@@ -1,0 +1,6 @@
+sejm_results_filename = data_2019_sejm/wyniki_sejm.csv
+district_info_filename = data_2019_sejm/okregi_sejm.csv
+transferral_config = config/id_transferral_2019.txt
+action = output_votes
+district_names = expanded
+output = csv

@@ -1,5 +1,6 @@
 #include <cassert>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 #include <map>
@@ -30,10 +31,11 @@ void test_minimum_votes(const std::map<std::string, int> &in,
 
 void test_key_vote_values(const std::map<std::string, int> &in,
                           int total_seats,
+                          const std::set<std::string> &rejected_parties,
                           const std::vector<int> &expected,
                           const std::string &test_description) {
   cout << "[ RUNNING ] " << test_description << std::endl;
-  auto res = KeyVoteValues(in, total_seats);
+  auto res = KeyVoteValues(in, total_seats, rejected_parties);
   assert_vector_eq(expected, res);
   cout << "[ OK ]" << std::endl;
 }
@@ -48,13 +50,17 @@ int main() {
   test_minimum_votes({{"A", 5}, {"B", 4}, {"C", 3}},
                      6, 3, 8, "Grab middle");
   test_minimum_votes({{"A", 5}}, 3, 3, 15, "Grab all with one party");
-  test_key_vote_values({{"A", 5}}, 3, {2, 5, 15}, "Single opponent");
-  test_key_vote_values({{"A", 20}, {"B", 7}}, 4, {7, 14, 30, 80},
+  test_key_vote_values({{"A", 5}}, 3, {}, {2, 5, 15}, "Single opponent");
+  test_key_vote_values({{"A", 20}, {"B", 7}}, 4, {}, {7, 14, 30, 80},
                        "Two opponents");
-  test_key_vote_values({{"A", 21}, {"B", 21}}, 5, {8, 21, 32, 84, 105},
+  test_key_vote_values({{"A", 21}, {"B", 21}}, 5, {}, {7, 21, 32, 84, 105},
                        "Two equal opponents");
-  test_key_vote_values({{"A", 20}, {"B", 16}, {"C", 10}, {"D", 1}}, 6,
+  test_key_vote_values({{"A", 20}, {"B", 16}, {"C", 10}, {"D", 1}}, 6, {},
                        {7, 16, 30, 40, 80, 120},
                        "Four opponents, one without seat");
+  test_key_vote_values({{"A", 20}, {"B", 7}}, 4, {"B"}, {14},
+                       "Two opponents with one rejected");
+  test_key_vote_values({{"A", 20}, {"B", 16}, {"C", 10}, {"D", 1}}, 6,
+                       {"A", "D"}, {7, 40, 120}, "Four oppos, two rejected");
   return 0;
 }

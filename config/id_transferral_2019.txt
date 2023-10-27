@@ -1,0 +1,6 @@
+Lewica = "-1/19"
+Koalicja Obywatelska = "-6/19"
+Konfederacja = "-5/19"
+Mniejszość Niemiecka = "-15/19"
+Prawo i Sprawiedliwość =  "-9/19"
+PSL = "-19/19"

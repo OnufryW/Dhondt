@@ -1,0 +1,25 @@
+# A "First Vote Policy" describes how to assign the "interval of votes
+# needed to shift a seat" to a party that gains no seats according to
+# our expected results.
+# (reminder - in the standard case the interval is 
+# #votes you can lose without losing a seat + #votes you need to gain a seat
+# 
+# The naive solution is just #votes to gain + #votes, but that
+# overemphasizes the chances of gaining a seat if you get basically no votes
+# So, we use a formula like below, where "V" is the predicted number of
+# votes, and "G" is the number of votes needed to gain the first seat.
+
+# The default first vote policy:
+# If we're closer to a new seat than to zero, just take the interval size
+# If we're closer to zero, take double the distance to the first seat.
+
+# Somewhat arbitrarily, the inflection point is at 70% (that is, if our
+# predictions are that a party gets 70% of the votes needed for a seat,
+# then we count the seat as normally competitive); while if our
+# calculations show a party gets no votes, we consider it basically
+# totally pointless to vote for that party (20 * the standard interval
+# size). We smoothen by taking a quadratic function, this amounts to
+# taking ~2 times the interval size when our algorithm suggests 50% of the
+# votes; obviously we can tweak this.
+
+20 * max(0.7 * (V+G) - V, 0) * (0.7 * (V+G) - V) / (V+G) + (V+G)

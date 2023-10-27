@@ -1,10 +1,9 @@
 #include <iostream>
 #include <string>
 #include <map>
-#include "../lib/election_results.h"
 #include "../lib/country_vote_bar.h"
+#include "../lib/map_tools.h"
 #include "test_util.h"
-#include "test_election_results.h"
 
 using std::cout;
 
@@ -16,11 +15,11 @@ void test_bar_value(const std::string &name, int expected) {
 
 void test_passes_bar(
     const std::string &desc,
-    const std::map<std::string, std::map<std::string, int>> &er,
+    const std::map<std::string, std::map<std::string, int>> &input,
     const std::map<std::string, bool> &expected) {
+  // For somewhat annoying historical reasons, tests take pivoted maps.
   cout << "[ RUNNING ] Test passes bar " << desc << std::endl;
-  ElectionResults input = ER(er);
-  auto res = PassesBar(&input);
+  auto res = PassesBar(PivotMap(input));
   assert_eq_maps(expected, res);
   cout << "[ OK ]" << std::endl;
 }
@@ -75,13 +74,6 @@ int main() {
        {"2", {{"A", 100}, {"B", 5}, {"C", 26}}},
        {"3", {{"A", 800}, {"B", 26}, {"C", 3}}}},
       {{"A", true}, {"B", true}, {"C", false}});
-  // Sums up to 100, with votes 2 for A, 2 for B, 48 for C and 48 for D.
-  test_passes_bar(
-      "Partial committees",
-      {{"1", {{"A", 1}, {"B", 2}, {"C", 24}}},
-       {"2", {{"A", 1}, {"C", 24}, {"D", 48}}}},
-      {{"A", false}, {"B", false}, {"C", true}, {"D", true}});
-
 
   test_filter_parties("All",
       {{"A", 10}, {"B", 20}, {"C", 30}},

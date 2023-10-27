@@ -11,7 +11,8 @@ using std::cout;
 
 int main() {
   cout << "[ RUNNING ]" << std::endl;
-  auto res = DistrictInfoFromFile2019("../data_2019_sejm/okregi_sejm.csv");
+  auto res = DistrictInfoFromFile2019(
+      "../data_2019_sejm/okregi_sejm.csv", 2019);
   auto wroclaw = res["3"];
   assert_eq(wroclaw.code, std::string("3"), "district ID");
   assert_eq(wroclaw.seats, 14, "seats");

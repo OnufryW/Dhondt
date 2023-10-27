@@ -1,0 +1,6 @@
+# This is a test first seat policy.
+# Contains comments to see if we parse them correctly
+
+# And empty lines
+# And finally the policy
+max(2 * G, V+G )  
