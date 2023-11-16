@@ -4,6 +4,7 @@
 #include <cassert>
 #include <string>
 #include <vector>
+#include <set>
 #include <map>
 #include "parse_csv.h"
 #include "strategy.h"
@@ -145,6 +146,37 @@ Strategy *PartyDistrictToWeightedDistrictListStrategy(
       targets.push_back(mc);
     }
     overs[source_district][party] = new OverrideFull(targets);
+  }
+  return new StrategyWithOverrides(overs);
+}
+
+Strategy *PartyChangeStrategy(const std::string &filename) {
+  auto lines = ParseFile(filename);
+  std::map<std::string, std::map<std::string, StrategyOverride *>> overs;
+  std::vector<std::string> all_strategy_parties = {
+      "Koalicja Obywatelska", "Lewica", "Trzecia Droga" };
+  for (auto line : lines) {
+    const std::string &district = line[0];
+    std::vector<MoveComponent> targets;
+    std::vector<std::string> source_parties;
+    for (const auto &party : all_strategy_parties) {
+      bool source = true;
+      for (size_t i = 1; i < line.size(); ++i) {
+        if (line[i] == party) source = false;
+      }
+      if (source) source_parties.push_back(party);
+    }
+    for (const auto &source_party : source_parties) {
+      std::vector<MoveComponent> targets;
+      for (size_t i = 1; i < line.size(); ++i) {
+        MoveComponent mc;
+        mc.target_district_id = district;
+        mc.target_committee = line[i];
+        mc.probability = 0.5 / (line.size() - 1);
+        targets.push_back(mc);
+      }
+      overs[district][source_party] = new OverrideFull(targets);
+    }
   }
   return new StrategyWithOverrides(overs);
 }
@@ -304,6 +336,8 @@ Strategy *PartyDistrictWeightsStrategy(const std::string &filename) {
   return new StrategyWithOverrides(overs);
 }
 
+std::string DIR_PREFIX;
+
 Strategy *ResolveStrategy(const std::string &strategy_config) {
   if (strategy_config == "go_to_olsztyn") {
     // Naive test strategy, everybody goes to district 35 (Olsztyn)
@@ -311,25 +345,25 @@ Strategy *ResolveStrategy(const std::string &strategy_config) {
         {{"*", {{"*", new OverrideDistrict("35")}}}});
   } else if (strategy_config == "majewski") {
     return PartyDistrictToDistrictListStrategy(
-        "data_recommendations/majewski.txt");
+        DIR_PREFIX + "data_recommendations/majewski.txt");
   } else if (strategy_config == "glosujtam") {
     return PartyDistrictToDistrictListStrategy(
-        "data_recommendations/glosujtam.txt");
+        DIR_PREFIX + "data_recommendations/glosujtam.txt");
   } else if (strategy_config == "wazymyglosy") {
     return PartyDistrictToDistrictListStrategy(
-        "data_recommendations/wazymyglosy.txt");
+        DIR_PREFIX + "data_recommendations/wazymyglosy.txt");
   } else if (strategy_config == "podrozewyborcze") {
     return PartyDistrictToWeightedDistrictListStrategy(
-        "data_recommendations/podrozewyborcze.txt");
+        DIR_PREFIX + "data_recommendations/podrozewyborcze.txt");
   } else if (strategy_config == "fb_weights") {
     return DistrictWeightsStrategy(
-        "data_recommendations/fb_weights.txt");
+        DIR_PREFIX + "data_recommendations/fb_weights.txt");
   } else if (strategy_config == "pers") {
     return DistrictWeightsStrategy(
-        "data_recommendations/pers.txt");
+        DIR_PREFIX + "data_recommendations/pers.txt");
   } else if (strategy_config == "fb_party") {
     return PartyDistrictWeightsStrategy(
-        "data_recommendations/fb_party.txt");
+        DIR_PREFIX + "data_recommendations/fb_party.txt");
   }
   assert(false);
 }

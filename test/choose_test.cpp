@@ -6,6 +6,8 @@
 
 using std::cout;
 
+#define DEBUG 0
+
 // I want to test that we won't be too far from the real answer. The metric
 // I'll use will be the integral of the absolute value of the difference
 // between the CDFs, and I'll expect that to be no more than 1% of the
@@ -38,13 +40,8 @@ void TestCdf(int N, int K, int L, int seed) {
     cdf_delta_integral += (cdf_delta < 0) ? -cdf_delta : cdf_delta;
   }
   long long stddev = expected_square * repeats - expected * expected;
-  // That's a pretty weak threshold, TBH - we're saying that we won't be
-  // more than a third of stddev off. However, the vast majority of this
-  // comes for K=L=N/2, and it comes from the assumption of independence,
-  // not the law of large numbers.
-  // Maaaaybe I should kill the variance in the CLT?
-  long long threshold = std::sqrt(stddev) / 3;
-  if (cdf_delta_integral > threshold) {
+  long long threshold = std::sqrt(stddev) / 20;
+  if (cdf_delta_integral > threshold || DEBUG) {
     cout << "FAILED: Delta integral is " << cdf_delta_integral
          << ", vs threshold of " << threshold << std::endl;
     cout << "v;manual;choose" << std::endl;

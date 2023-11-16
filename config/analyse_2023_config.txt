@@ -8,14 +8,15 @@ data_year = 2023
 # What to actually do
 
 action = output_apply_strategy
-strategy = fb_party
+strategy = pers
 strategy_min_voters = 0
 strategy_max_voters = 3000000
+strategy_voters_step = 10000
+strategy_output = table_for_each_party; aggregate_districts
 repeats = 1000
-strategy_aggregation = aggregate
 rejected_parties = Prawo i Sprawiedliwość; Konfederacja
 
 # Output configuration
 
 district_names = expanded
-output = stdout
+output = csv

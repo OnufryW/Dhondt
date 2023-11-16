@@ -25,8 +25,43 @@ PivotMap(const std::map<K1, std::map<K2, T>> &source) {
   return result;
 }
 
-template<typename T>
-T SumMap(const std::map<std::string, T> &source) {
+// Pivots the first key to become the deepest subkey in a three-level map.
+// Same restrictions as with PivotMap apply.
+template<typename K1, typename K2, typename K3, typename T>
+std::map<K2, std::map<K3, std::map<K1, T>>>
+PivotToThree(const std::map<K1, std::map<K2, std::map<K3, T>>> &source) {
+  std::map<K2, std::map<K3, std::map<K1, T>>> result;
+  for (const auto &entry : PivotMap(source)) {
+    result[entry.first] = PivotMap(entry.second);
+  }
+  return result;
+}
+
+template<typename oldK, typename newK, typename T>
+std::map<newK, T> TranslateKeys(const std::map<oldK, T> &M,
+                                std::function<newK(oldK)> translate) {
+  std::map<newK, T> res;
+  for (const auto &entry : M) {
+    res[translate(entry.first)] = entry.second;
+  }
+  return res;
+}
+
+template<typename K1, typename K2, typename T1, typename T2>
+std::map<K1, std::map<K2, T2>> TransformSubValues(
+    const std::map<K1, std::map<K2, T1>> &source,
+    std::function<T2(T1)> &translate) {
+  std::map<K1, std::map<K2, T2>> result;
+  for (const auto &entry : source) {
+    for (const auto &subentry : entry.second) {
+      result[entry.first][subentry.first] = translate(subentry.second);
+    }
+  }
+  return result;
+}
+
+template<typename K, typename T>
+T SumMap(const std::map<K, T> &source) {
   T res = 0;
   for (const auto &key_value : source) {
     res += key_value.second;
@@ -40,6 +75,17 @@ std::map<K1, T> SumSubmaps(const std::map<K1, std::map<K2, T>> &source) {
   std::map<K1, T> result;
   for (const auto &submap : source) {
     result[submap.first] = SumMap(submap.second);
+  }
+  return result;
+}
+
+// Sums the value in the sub-submap.
+template<typename K1, typename K2, typename K3, typename T>
+std::map<K1, std::map<K2, T>> SumSubSubmaps(
+    const std::map<K1, std::map<K2, std::map<K3, T>>> &source) {
+  std::map<K1, std::map<K2, T>> result;
+  for (const auto &submap : source) {
+    result[submap.first] = SumSubmaps(submap.second);
   }
   return result;
 }

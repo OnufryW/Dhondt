@@ -3,6 +3,8 @@
 #include <iostream>
 #include <random>
 #include <cassert>
+#include <sstream>
+#include <iomanip>
 
 #include "lib/parse_election_results.h"
 #include "lib/parse_presidential_results.h"
@@ -50,7 +52,9 @@ const string data_year = "data_year";
 const string strategy_config = "strategy";
 const string strategy_min_voters_config = "strategy_min_voters";
 const string strategy_max_voters_config = "strategy_max_voters";
-const string strategy_aggregation_config = "strategy_aggregation";
+const string strategy_voters_step_config = "strategy_voters_step";
+const string strategy_output_config = "strategy_output";
+
 
 bool ConfigContains(const std::map<std::string, std::string> &config,
                     const std::string &key) {
@@ -225,29 +229,61 @@ int main(int argc, char *argv[]) {
   if (main_config[action] == "output_apply_strategy") {
     Strategy *strategy = ResolveStrategy(
         AssertGetConfigValue(main_config, strategy_config));
+    std::vector<std::pair<int, int>> ranges;
     int min_voters =
         AssertGetIntConfigValue(main_config, strategy_min_voters_config);
     int max_voters =
         AssertGetIntConfigValue(main_config, strategy_max_voters_config);
-    AssertConfigContains(main_config, strategy_aggregation_config);
+    if (ConfigContains(main_config, strategy_voters_step_config)) {
+      int step =
+          AssertGetIntConfigValue(main_config, strategy_voters_step_config);
+      assert((max_voters - min_voters) % step == 0);
+      for (int lower = min_voters; lower < max_voters; lower += step) {
+        ranges.push_back({ lower, lower + step});
+      }
+    } else {
+      ranges = { std::make_pair(
+          AssertGetIntConfigValue(main_config, strategy_min_voters_config),
+          AssertGetIntConfigValue(main_config, strategy_max_voters_config)) };
+    } 
     int repeats_cnt =
         AssertGetIntConfigValue(main_config, repeats);
     std::set<std::string> rejected_parties_list;
     if (ConfigContains(main_config, rejected_parties)) {
       rejected_parties_list = ParseConfigList(main_config[rejected_parties]);
     }
+    AssertConfigContains(main_config, strategy_output_config);
+    std::set<std::string> strategy_output =
+        ParseConfigList(main_config[strategy_output_config]);
     std::random_device rd{};
     std::mt19937 gen{rd()};
-    std::cerr << "Getting strategy results" << std::endl;
-    auto strategy_results = CheckStrategyResults(
-        votes, d_seats, *strategy, rejected_parties_list, min_voters, max_voters,
-        repeats_cnt, gen);
-    if (main_config[strategy_aggregation_config] == "by_district") {
-      OutputMapOfMaps(strategy_results, main_config[output],
-                      main_config[district_names], d_names);
-    } else {
-      assert(main_config[strategy_aggregation_config] == "aggregate");
-      OutputMap(SumSubmaps(strategy_results), main_config[output], "", {});
+    std::map<std::pair<int, int>, std::map<std::string, std::map<std::string, double>>>
+        strategy_results;  // Voter range -> committee -> district -> seatdelta
+    std::function<std::string(std::pair<int, int>)> pair_to_string =
+        [](std::pair<int, int> p) {
+          std::ostringstream ostr;
+          ostr << "[" << std::setfill('0') << std::setw(7) << p.first << "-"
+               << std::setfill('0') << std::setw(7) << p.second << "]";
+          return ostr.str(); };
+    for (auto &voters_range : ranges) {
+      std::cerr << "Strategy for " << pair_to_string(voters_range) << std::endl;
+      strategy_results[voters_range] = CheckStrategyResults(
+          votes, d_seats, *strategy, rejected_parties_list, voters_range.first,
+          voters_range.second, repeats_cnt, gen);
+    }
+    if (strategy_output.find("table_for_each_party") != strategy_output.end()) {
+      for (const auto &party_and_res : PivotMap(strategy_results)) {
+        std::cout << party_and_res.first << std::endl;
+        OutputMapOfMaps(TranslateKeys(party_and_res.second, pair_to_string),
+                        main_config[output], main_config[district_names], d_names);
+        std::cout << std::endl;
+      }
+    }
+    if (strategy_output.find("aggregate_districts") != strategy_output.end()) {
+      auto to_print = PivotMap(
+          TranslateKeys(SumSubSubmaps(strategy_results), pair_to_string));
+      OutputMapOfMaps(to_print, main_config[output], "", {});
+      std::cout << std::endl;
     }
   }
   if (main_config[action] == "output_stddev") {

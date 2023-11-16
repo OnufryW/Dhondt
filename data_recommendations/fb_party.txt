@@ -1,0 +1,123 @@
+"Lewica";1;3
+"Lewica";2;4
+"Lewica";3;2
+"Lewica";4;2
+"Lewica";5;3
+"Lewica";6;6
+"Lewica";7;5
+"Lewica";8;2
+"Lewica";9;2
+"Lewica";10;5
+"Lewica";11;3
+"Lewica";12;2
+"Lewica";13;2
+"Lewica";14;2
+"Lewica";15;1
+"Lewica";16;5
+"Lewica";17;3
+"Lewica";18;4
+"Lewica";19;1
+"Lewica";20;2
+"Lewica";21;3
+"Lewica";22;3
+"Lewica";23;4
+"Lewica";24;4
+"Lewica";25;2
+"Lewica";26;2
+"Lewica";27;3
+"Lewica";28;4
+"Lewica";29;3
+"Lewica";30;4
+"Lewica";31;2
+"Lewica";32;3
+"Lewica";33;4
+"Lewica";34;5
+"Lewica";35;3
+"Lewica";36;3
+"Lewica";37;3
+"Lewica";38;3
+"Lewica";39;1
+"Lewica";40;4
+"Lewica";41;2
+"Koalicja Obywatelska";1;3
+"Koalicja Obywatelska";2;3
+"Koalicja Obywatelska";3;2
+"Koalicja Obywatelska";4;3
+"Koalicja Obywatelska";5;3
+"Koalicja Obywatelska";6;4
+"Koalicja Obywatelska";7;5
+"Koalicja Obywatelska";8;2
+"Koalicja Obywatelska";9;2
+"Koalicja Obywatelska";10;4
+"Koalicja Obywatelska";11;3
+"Koalicja Obywatelska";12;4
+"Koalicja Obywatelska";13;2
+"Koalicja Obywatelska";14;5
+"Koalicja Obywatelska";15;5
+"Koalicja Obywatelska";16;4
+"Koalicja Obywatelska";17;4
+"Koalicja Obywatelska";18;5
+"Koalicja Obywatelska";19;1
+"Koalicja Obywatelska";20;2
+"Koalicja Obywatelska";21;3
+"Koalicja Obywatelska";22;4
+"Koalicja Obywatelska";23;4
+"Koalicja Obywatelska";24;3
+"Koalicja Obywatelska";25;2
+"Koalicja Obywatelska";26;2
+"Koalicja Obywatelska";27;3
+"Koalicja Obywatelska";28;3
+"Koalicja Obywatelska";29;3
+"Koalicja Obywatelska";30;3
+"Koalicja Obywatelska";31;2
+"Koalicja Obywatelska";32;3
+"Koalicja Obywatelska";33;4
+"Koalicja Obywatelska";34;4
+"Koalicja Obywatelska";35;3
+"Koalicja Obywatelska";36;3
+"Koalicja Obywatelska";37;3
+"Koalicja Obywatelska";38;2
+"Koalicja Obywatelska";39;1
+"Koalicja Obywatelska";40;3
+"Koalicja Obywatelska";41;2
+"Trzecia Droga";1;3
+"Trzecia Droga";2;5
+"Trzecia Droga";3;2
+"Trzecia Droga";4;2
+"Trzecia Droga";5;3
+"Trzecia Droga";6;4
+"Trzecia Droga";7;5
+"Trzecia Droga";8;3
+"Trzecia Droga";9;3
+"Trzecia Droga";10;4
+"Trzecia Droga";11;3
+"Trzecia Droga";12;5
+"Trzecia Droga";13;2
+"Trzecia Droga";14;5
+"Trzecia Droga";15;4
+"Trzecia Droga";16;4
+"Trzecia Droga";17;5
+"Trzecia Droga";18;4
+"Trzecia Droga";19;1
+"Trzecia Droga";20;2
+"Trzecia Droga";21;3
+"Trzecia Droga";22;5
+"Trzecia Droga";23;4
+"Trzecia Droga";24;4
+"Trzecia Droga";25;2
+"Trzecia Droga";26;2
+"Trzecia Droga";27;3
+"Trzecia Droga";28;5
+"Trzecia Droga";29;3
+"Trzecia Droga";30;4
+"Trzecia Droga";31;3
+"Trzecia Droga";32;4
+"Trzecia Droga";33;4
+"Trzecia Droga";34;4
+"Trzecia Droga";35;3
+"Trzecia Droga";36;3
+"Trzecia Droga";37;4
+"Trzecia Droga";38;2
+"Trzecia Droga";39;1
+"Trzecia Droga";40;4
+"Trzecia Droga";41;2

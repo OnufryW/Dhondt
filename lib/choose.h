@@ -52,16 +52,17 @@ int ChoosePoisson(int N, int K, int L, std::mt19937 &gen) {
 
 // This assumes we're in the CLT domain (sum of many events).
 int ChooseNormal(int N, int K, int L, std::mt19937 &gen) {
-  // Expected value. Hard to guess which approximation is better - on one
-  // hand, the CLT approximation would be better with more events (so, L
-  // random draws with probability K/N each), but on the other hand I think
-  // the approximation by independent events is better with K random draws
-  // with probability L/N each. I think the independence approximation has
-  // larger errors, so...
   double single = (double) L / (double) N;
   double expected = K * single;
-  double variance = std::sqrt(K * single * (1. - single));
-  std::normal_distribution<double> nd(expected, variance);
+  // Instead of taking the variance of the independent variables, we take
+  // the real variance of the actual variable we're approximating. Turns out
+  // this gives a better approximation in the tests.
+  double variance = K * (double) L;
+  variance *= (N-K) * (double) (N-L);
+  variance /= N * (double) N;
+  variance /= (N-1);
+  double stddev = std::sqrt(variance);
+  std::normal_distribution<double> nd(expected, stddev);
   double res = nd(gen) + 0.5;
   assert (res > 0);
   return res;

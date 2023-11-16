@@ -8,6 +8,19 @@
 #include <cassert>
 #include <iostream>
 
+
+const long double EPS = 1e-9;
+template<typename T>
+void assert_eq_eps(T expected, T actual, const std::string &desc,
+                   long double eps=EPS) {
+  if (actual < expected - eps || actual > expected + eps) {
+    std::cout << "FAILED: Obtained " << desc << " equal to '" << actual
+              << "', does not match expected '" << expected << "' within "
+              << eps << " precision" << std::endl;
+    assert(false);
+  }
+}
+
 template<typename T, typename K>
 void print_map(const std::map<K, T> &M) {
 	for (auto &value : M) {
@@ -25,6 +38,36 @@ void print_maps_and_fail(const std::map<K, T> &expected,
   print_map(actual);
   std::cout.flush();
   assert(false);
+}
+
+template<typename T, typename K>
+void assert_eq_eps_maps(const std::map<K, T> &expected,
+                        const std::map<K, T> &actual,
+                        const std::string &description,
+                        long double eps=EPS) {
+  if (actual.size() != expected.size()) {
+    std::cout << "FAILED: result map size (" << actual.size() 
+              << ") does not match expected (" << expected.size() << ")!"
+              << std::endl;
+    print_maps_and_fail(expected, actual);
+  }
+  for (auto V : expected) {
+    std::string key = V.first;
+    if (actual.find(key) == actual.end()) {
+      std::cout << "FAILED: result for " << key << " not found in actually "
+                << "obtained map!" << std::endl;
+      print_maps_and_fail(expected, actual);
+    }
+    T actual_val = actual.find(key)->second;
+    T expected_val = V.second;
+    if (actual_val < expected_val - eps || actual_val > expected_val + eps) {
+      std::cout << "FAILED: result for " << key << " ("
+                << actual.find(key)->second
+                << ") does not match expectation(" << V.second
+                << ") within " << eps << "precision!" << std::endl;
+      print_maps_and_fail(expected, actual);
+    }
+  }
 }
 
 template<typename T, typename K>
@@ -164,18 +207,6 @@ void assert_eq(const T &expected, const T &actual, const std::string &desc) {
     std::cout << "FAILED: Obtained " << desc << " equal to '" << actual
               << "', does not match expected '" << expected << "'"
               << std::endl;
-    assert(false);
-  }
-}
-
-const long double EPS = 1e-9;
-template<typename T>
-void assert_eq_eps(T expected, T actual, const std::string &desc,
-                   long double eps=EPS) {
-  if (actual < expected - eps || actual > expected + eps) {
-    std::cout << "FAILED: Obtained " << desc << " equal to '" << actual
-              << "', does not match expected '" << expected << "' within "
-              << eps << " precision" << std::endl;
     assert(false);
   }
 }
