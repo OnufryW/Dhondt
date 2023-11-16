@@ -100,6 +100,18 @@ template<typename K, typename T> std::map<K, T> DivideMaps(
   return result;
 }
 
+template<typename K1, typename K2, typename T>
+std::map<K1, std::map<K2, T>> DivideByConst(
+    const std::map<K1, std::map<K2, T>> &S, T divisor) {
+  std::map<K1, std::map<K2, T>> res;
+  for (const auto &entry : S) {
+    for (const auto &subentry : entry.second) {
+      res[entry.first][subentry.first] = subentry.second / divisor;
+    }
+  }
+  return res;
+}
+
 template<typename From, typename To>
 std::map<std::string, To> CastMap(const std::map<std::string, From> &M) {
   std::map<std::string, To> res;

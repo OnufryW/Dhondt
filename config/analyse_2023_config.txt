@@ -9,12 +9,14 @@ data_year = 2023
 
 action = output_apply_strategy
 strategy = pers
-strategy_min_voters = 0
+strategy_min_voters = -500000
 strategy_max_voters = 3000000
 strategy_voters_step = 10000
-strategy_output = table_for_each_party; aggregate_districts
+strategy_output = table_for_each_party; aggregate_districts; aggregate_ranges; non_rejected_parties
 repeats = 1000
-rejected_parties = Prawo i Sprawiedliwość; Konfederacja
+# I drop out the German Minority; because some strategies advise moving
+# out of Opole, and that causes issues.
+rejected_parties = Prawo i Sprawiedliwość; Konfederacja; Mniejszość Niemiecka
 
 # Output configuration
 

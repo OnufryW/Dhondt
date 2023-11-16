@@ -13,7 +13,7 @@ std::map<std::string, std::map<std::string, double>> CheckStrategyResults(
     const std::map<std::string, int> &seat_counts_per_district,
     Strategy &strategy, const std::set<std::string> &rejected_parties,
     int min_voters, int max_voters, int repeats,
-    std::mt19937 &gen) {
+    std::mt19937 &gen, long long &affected_voters) {
   std::map<std::string, std::map<std::string, double>> res;
   for (const auto &c_d : votes) {
     for (const auto &d_d : c_d.second) {
@@ -31,19 +31,23 @@ std::map<std::string, std::map<std::string, double>> CheckStrategyResults(
 
   std::uniform_int_distribution applied_voters(min_voters, max_voters);
   int successful_attempts = 0;
+  affected_voters = 0;
   for (int attempt = 0; attempt < repeats; ++attempt) {
     int voters = applied_voters(gen);
+    int affected_voters_in_cycle = 0;
     bool success = true;
     std::map<std::string, std::map<std::string, int>> res_votes;
     if (voters > 0) {
-      res_votes =
-          ApplyStrategy(votes, strategy, rejected_parties, voters, gen);
+      res_votes = ApplyStrategy(votes, strategy, rejected_parties, voters,
+                                gen, affected_voters_in_cycle);
     } else {
       res_votes = ReverseStrategy(
-          votes, strategy, rejected_parties, -voters, gen, success);
+        votes, strategy, rejected_parties,
+        -voters, gen, success, affected_voters_in_cycle);
     }
     if (success) {
       successful_attempts += 1;
+      affected_voters += affected_voters_in_cycle;
       res_votes = PivotMap(res_votes);
       for (const auto &d_d : res_votes) {
         auto new_seats =
@@ -54,7 +58,11 @@ std::map<std::string, std::map<std::string, double>> CheckStrategyResults(
       }
     }
   }
-  assert(successful_attempts > 0);
+  if (successful_attempts < repeats / 10 || successful_attempts == 0) {
+    affected_voters = 0;
+    return {};
+  }
+  affected_voters /= successful_attempts;
   for (auto &c_d : res) {
     for (auto &d_d : c_d.second) {
       d_d.second /= successful_attempts;

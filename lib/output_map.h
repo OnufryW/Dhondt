@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <iostream>
+#include <functional>
 
 template<typename T>
 void DisplayMap(const std::map<std::string, T> &m) {
@@ -12,11 +13,12 @@ void DisplayMap(const std::map<std::string, T> &m) {
   }
 }
 
-template<typename T>
+template<typename T, typename oK1, typename K1>
 void DisplayMapOfMaps(
-    const std::map<std::string, std::map<std::string, T>> &m) {
+    const std::map<oK1, std::map<std::string, T>> &m,
+    std::function<K1(oK1)> &translateKey) {
   for (const auto &entry : m) {
-    std::cout << entry.first << std::endl;
+    std::cout << translateKey(entry.first) << std::endl;
     DisplayMap(entry.second);
     std::cout << std::endl;
   }
@@ -28,11 +30,12 @@ void VisualDivider() {
             << std::endl;
 }
 
-template<typename T>
-void CsvMapOfMaps(const std::map<std::string, std::map<std::string, T>> &m) {
+template<typename T, typename K1, typename oK1>
+void CsvMapOfMaps(const std::map<oK1, std::map<std::string, T>> &m,
+                  std::function<K1(oK1)> &translateKey) {
   std::cout << "\"\";";
   for (const auto &committee_data : m) {
-    std::cout << "\"" << committee_data.first << "\";";
+    std::cout << "\"" << translateKey(committee_data.first) << "\";";
   }
   std::cout << std::endl;
   for (const auto &district : m.begin()->second) {
@@ -59,12 +62,12 @@ std::map<std::string, T> ExpandDistrictNamesInMap(
 }
 
 // Same operation as above, except the map is committee->district->int
-template<typename T>
-std::map<std::string, std::map<std::string, T>>
+template<typename T, typename K>
+std::map<K, std::map<std::string, T>>
 ExpandDistrictNamesInMapOfMaps(
-    const std::map<std::string, std::map<std::string, T>> &input,
+    const std::map<K, std::map<std::string, T>> &input,
     const std::map<std::string, std::string> &district_names) {
-  std::map<std::string, std::map<std::string, T>> result;
+  std::map<K, std::map<std::string, T>> result;
   for (const auto &key_map : input) {
     result[key_map.first] =
         ExpandDistrictNamesInMap(key_map.second, district_names);
@@ -72,12 +75,13 @@ ExpandDistrictNamesInMapOfMaps(
   return result;
 }
 
-template<typename T>
+template<typename T, typename oK1, typename K1>
 void OutputMapOfMaps(
-    std::map<std::string, std::map<std::string, T>> map_of_maps,
+    std::map<oK1, std::map<std::string, T>> map_of_maps,
     const std::string &output_format,
     const std::string &district_names_config,
-    const std::map<std::string, std::string> &district_names) {
+    const std::map<std::string, std::string> &district_names,
+    std::function<K1(oK1)> &translateKey) {
   if (district_names_config == "expanded") {
     map_of_maps = ExpandDistrictNamesInMapOfMaps(
         map_of_maps, district_names);
@@ -85,12 +89,23 @@ void OutputMapOfMaps(
     assert(district_names_config == "");
   }
   if (output_format == "stdout") {
-    DisplayMapOfMaps(map_of_maps);
+    DisplayMapOfMaps(map_of_maps, translateKey);
   } else if (output_format == "csv") {
-    CsvMapOfMaps(map_of_maps);
+    CsvMapOfMaps(map_of_maps, translateKey);
   } else {
     assert(false);
   }
+}
+
+template<typename T, typename K>
+void OutputMapOfMaps(
+    std::map<K, std::map<std::string, T>> map_of_maps,
+    const std::string &output_format,
+    const std::string &district_names_config,
+    const std::map<std::string, std::string> &district_names) {
+  std::function<K(K)> id = [](K k){return k;};
+  OutputMapOfMaps(map_of_maps, output_format, district_names_config,
+                  district_names, id);
 }
 
 template<typename T>

@@ -11,7 +11,7 @@
 std::map<std::string, std::map<std::string, int>> CalculateDeltas(
     const std::map<std::string, std::map<std::string, int>> &votes,
     Strategy &strategy, const std::set<std::string> &rejected_parties,
-    int voters_used, std::mt19937 &gen) {
+    int voters_used, std::mt19937 &gen, int &affected_voters) {
   int total_voters = SumMap(SumSubmaps(votes));
   std::map<std::string, std::map<std::string, int>> deltas;
   for (const auto &committee_data : votes) {
@@ -39,6 +39,7 @@ std::map<std::string, std::map<std::string, int>> CalculateDeltas(
           int appliers = Select(
               applicable_voters, component.probability / prob_weight,
               gen);
+          affected_voters += appliers;
           prob_weight -= component.probability;
           deltas[committee][district] -= appliers;
           deltas[component.target_committee]
@@ -57,9 +58,9 @@ std::map<std::string, std::map<std::string, int>> CalculateDeltas(
 std::map<std::string, std::map<std::string, int>> ApplyStrategy(
     const std::map<std::string, std::map<std::string, int>> &votes,
     Strategy &strategy, const std::set<std::string> &rejected_parties,
-    int voters_used, std::mt19937 &gen) {
+    int voters_used, std::mt19937 &gen, int &affected_voters) {
   auto deltas = CalculateDeltas(
-      votes, strategy, rejected_parties, voters_used, gen);
+      votes, strategy, rejected_parties, voters_used, gen, affected_voters);
   auto new_votes = votes;
   for (const auto &committee_data : votes) {
     auto committee = committee_data.first;
@@ -79,9 +80,9 @@ std::map<std::string, std::map<std::string, int>> ApplyStrategy(
 std::map<std::string, std::map<std::string, int>> ReverseStrategy(
     const std::map<std::string, std::map<std::string, int>> &votes,
     Strategy &strategy, const std::set<std::string> &rejected_parties,
-    int voters_used, std::mt19937 &gen, bool &success) {
+    int voters_used, std::mt19937 &gen, bool &success, int &affected_voters) {
   auto deltas = CalculateDeltas(
-      votes, strategy, rejected_parties, voters_used, gen);
+      votes, strategy, rejected_parties, voters_used, gen, affected_voters);
   auto new_votes = votes;
   for (const auto &committee_data : votes) {
     auto committee = committee_data.first;
@@ -89,6 +90,7 @@ std::map<std::string, std::map<std::string, int>> ReverseStrategy(
       auto district = district_data.first;
       new_votes[committee][district] -= deltas[committee][district];
       if (new_votes[committee][district] < 0) {
+        std::cerr << "Failed to secure " << deltas[committee][district] << " votes for " << committee << " in " << district << std::endl;
         success = false;
         return {};
       }

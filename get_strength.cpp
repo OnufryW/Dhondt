@@ -56,26 +56,23 @@ const string strategy_voters_step_config = "strategy_voters_step";
 const string strategy_output_config = "strategy_output";
 
 
-bool ConfigContains(const std::map<std::string, std::string> &config,
-                    const std::string &key) {
+bool ConfigContains(const std::map<string, string> &config, const string &key) {
   return config.find(key) != config.end();
 }
 
-void AssertConfigContains(const std::map<std::string, std::string> &config,
-                          const std::string &key) {
+void AssertConfigContains(const std::map<string, string> &config,
+                          const string &key) {
   assert(ConfigContains(config, key));
 }
 
 std::string AssertGetConfigValue(
-    const std::map<std::string, std::string> &config,
-    const std::string &key) {
+    const std::map<string, string> &config, const string &key) {
   AssertConfigContains(config, key);
   return config.at(key);
 }
 
 int AssertGetIntConfigValue(
-    const std::map<std::string, std::string> &config,
-    const std::string &key) {
+    const std::map<string, string> &config, const string &key) {
   return std::atoi(AssertGetConfigValue(config, key).c_str());
 }
 
@@ -125,7 +122,7 @@ int main(int argc, char *argv[]) {
   }
 
   /************** Prepare the map of stddevs, to accumulate into *******/
-  std::map<std::string, std::map<std::string, double>> stddevs;
+  std::map<string, std::map<string, double>> stddevs;
   for (const auto &entry : votes) {
     stddevs[entry.first] = {};
     for (const auto &sub_entry : entry.second) {
@@ -227,8 +224,9 @@ int main(int argc, char *argv[]) {
               main_config[district_names], d_names);
   }
   if (main_config[action] == "output_apply_strategy") {
-    Strategy *strategy = ResolveStrategy(
-        AssertGetConfigValue(main_config, strategy_config));
+    string strategy_name = AssertGetConfigValue(main_config, strategy_config);
+    Strategy *strategy = ResolveStrategy(strategy_name);
+    std::cout << "Assessing strategy for " << strategy_name << std::endl;
     std::vector<std::pair<int, int>> ranges;
     int min_voters =
         AssertGetIntConfigValue(main_config, strategy_min_voters_config);
@@ -248,41 +246,69 @@ int main(int argc, char *argv[]) {
     } 
     int repeats_cnt =
         AssertGetIntConfigValue(main_config, repeats);
-    std::set<std::string> rejected_parties_list;
+    std::set<string> rejected_parties_list;
     if (ConfigContains(main_config, rejected_parties)) {
       rejected_parties_list = ParseConfigList(main_config[rejected_parties]);
     }
     AssertConfigContains(main_config, strategy_output_config);
-    std::set<std::string> strategy_output =
+    std::set<string> strategy_output =
         ParseConfigList(main_config[strategy_output_config]);
     std::random_device rd{};
     std::mt19937 gen{rd()};
-    std::map<std::pair<int, int>, std::map<std::string, std::map<std::string, double>>>
+    std::map<std::pair<int, int>, std::map<string, std::map<string, double>>>
         strategy_results;  // Voter range -> committee -> district -> seatdelta
-    std::function<std::string(std::pair<int, int>)> pair_to_string =
+    std::function<string(std::pair<int, int>)> pair_to_string =
         [](std::pair<int, int> p) {
           std::ostringstream ostr;
           ostr << "[" << std::setfill('0') << std::setw(7) << p.first << "-"
                << std::setfill('0') << std::setw(7) << p.second << "]";
           return ostr.str(); };
     for (auto &voters_range : ranges) {
-      std::cerr << "Strategy for " << pair_to_string(voters_range) << std::endl;
-      strategy_results[voters_range] = CheckStrategyResults(
+      std::cerr << "Strategy for " << pair_to_string(voters_range) << ";";
+      long long affected_voters;
+      auto range_result = CheckStrategyResults(
           votes, d_seats, *strategy, rejected_parties_list, voters_range.first,
-          voters_range.second, repeats_cnt, gen);
+          voters_range.second, repeats_cnt, gen, affected_voters);
+      if (!range_result.empty()) {
+        strategy_results[voters_range] = range_result;
+        std::cerr << affected_voters << std::endl;
+      } else {
+        std::cerr << "N/A" << std::endl;
+      }
     }
     if (strategy_output.find("table_for_each_party") != strategy_output.end()) {
       for (const auto &party_and_res : PivotMap(strategy_results)) {
         std::cout << party_and_res.first << std::endl;
-        OutputMapOfMaps(TranslateKeys(party_and_res.second, pair_to_string),
-                        main_config[output], main_config[district_names], d_names);
+        OutputMapOfMaps(party_and_res.second,
+                        main_config[output], main_config[district_names],
+                        d_names, pair_to_string);
         std::cout << std::endl;
       }
     }
+    if (strategy_output.find("non_rejected_parties") != strategy_output.end()) {
+    std::map<string, std::map<std::pair<int, int>,
+        std::map<string, double>>> trimmed;
+    std::cout << "Non-rejected parties" << std::endl;
+    for (const auto &entry : PivotMap(strategy_results)) {
+      if (rejected_parties_list.find(entry.first) ==
+          rejected_parties_list.end()) {
+        trimmed[entry.first] = entry.second;
+      }
+    }
+    OutputMapOfMaps(SumSubSubmaps(PivotToThree(trimmed)),
+                    main_config[output], main_config[district_names],
+                    d_names, pair_to_string);
+    std::cout << std::endl;
+  }
     if (strategy_output.find("aggregate_districts") != strategy_output.end()) {
-      auto to_print = PivotMap(
-          TranslateKeys(SumSubSubmaps(strategy_results), pair_to_string));
-      OutputMapOfMaps(to_print, main_config[output], "", {});
+      auto to_print = SumSubSubmaps(strategy_results);
+      OutputMapOfMaps(to_print, main_config[output], "", {}, pair_to_string);
+      std::cout << std::endl;
+    }
+    if (strategy_output.find("aggregate_ranges") != strategy_output.end()) {
+      auto to_print = DivideByConst(SumSubSubmaps(
+          PivotToThree(strategy_results)), (double) strategy_output.size());
+      OutputMapOfMaps(to_print, main_config[output], main_config[district_names], d_names);
       std::cout << std::endl;
     }
   }
@@ -303,7 +329,7 @@ int main(int argc, char *argv[]) {
   }
   if (main_config[action] == "probabilistic") {
     std::cerr << "Running probabilistic strength calculations" << std::endl;
-    std::set<std::string> rejected_parties_list;
+    std::set<string> rejected_parties_list;
     if (ConfigContains(main_config, rejected_parties)) {
       rejected_parties_list = ParseConfigList(main_config[rejected_parties]);
     }
