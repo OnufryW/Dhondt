@@ -195,6 +195,10 @@ int main(int argc, char *argv[]) {
     OutputMapOfMaps(votes, main_config[output], main_config[district_names],
                     d_names);
   }
+  if (main_config[action] == "output_votes_per_district") {
+    OutputMap(SumSubmaps(PivotMap(votes)), main_config[output], 
+              main_config[district_names], d_names);
+  }
   if (main_config[action] == "output_seats") {
     // The key here isn't the district name, so expanding district names
     // makes zero sense.
