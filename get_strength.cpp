@@ -25,6 +25,7 @@
 #include "lib/strategy.h"
 #include "lib/resolve_strategy.h"
 #include "lib/strategy_seat_changes.h"
+#include "lib/real_threshold.h"
 
 using std::string;
 
@@ -54,7 +55,8 @@ const string strategy_min_voters_config = "strategy_min_voters";
 const string strategy_max_voters_config = "strategy_max_voters";
 const string strategy_voters_step_config = "strategy_voters_step";
 const string strategy_output_config = "strategy_output";
-
+const string threshold_max_seats = "threshold_max_seats";
+const string threshold_type = "threshold_type";
 
 bool ConfigContains(const std::map<string, string> &config, const string &key) {
   return config.find(key) != config.end();
@@ -65,7 +67,7 @@ void AssertConfigContains(const std::map<string, string> &config,
   assert(ConfigContains(config, key));
 }
 
-std::string AssertGetConfigValue(
+string AssertGetConfigValue(
     const std::map<string, string> &config, const string &key) {
   AssertConfigContains(config, key);
   return config.at(key);
@@ -76,7 +78,18 @@ int AssertGetIntConfigValue(
   return std::atoi(AssertGetConfigValue(config, key).c_str());
 }
 
+string GetConfigValueWithDefault(
+    const std::map<string, string> &config, const string &key,
+    const string &def) {
+  if (!ConfigContains(config, key)) return def;
+  return config.at(key);
+}
 
+int GetIntConfigValueWithDefault(
+    const std::map<string, string> &config, const string &key, int def) {
+  if (!ConfigContains(config, key)) return def;
+  return AssertGetIntConfigValue(config, key);
+}
 
 int main(int argc, char *argv[]) {
   assert(argc == 2);
@@ -204,6 +217,14 @@ int main(int argc, char *argv[]) {
     // makes zero sense.
     OutputMap(AssignSeatsToParty(d_seats, votes),
               main_config[output], "", {});
+  }
+  if (main_config[action] == "output_thresholds") {
+    int max_seats = GetIntConfigValueWithDefault(
+        main_config, threshold_max_seats, 30);
+    string type = AssertGetConfigValue(main_config, threshold_type);
+    OutputMapOfMaps(PivotMap(GetThresholds(votes, type, max_seats)),
+                    main_config[output], main_config[district_names],
+                    d_names);
   }
   if (main_config[action] == "output_votes_per_seat") {
     OutputMap(

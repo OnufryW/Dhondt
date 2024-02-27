@@ -28,7 +28,9 @@ int total_counts_index(const std::vector<std::vector<std::string>> &votes) {
   std::vector<bool> is_valid_startpoint(votes[0].size(), true);
   for (int i = 1; i < (int) votes.size(); ++i) {
     std::vector<bool> line_startpoints = valid_startpoints(votes[i]);
-    if (line_startpoints.size() != is_valid_startpoint.size()) return -1;
+    if (line_startpoints.size() != is_valid_startpoint.size()) {
+      return -1;
+    }
     for (int i = 0; i < (int) line_startpoints.size(); ++i) {
       is_valid_startpoint[i] = is_valid_startpoint[i] && line_startpoints[i];
     }

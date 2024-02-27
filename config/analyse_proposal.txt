@@ -1,0 +1,15 @@
+# File configs
+
+sejm_results_filename = data_2019_sejm/wyniki_sejm_2023.csv
+transferral_config = config/vote_transferral_policy_2023.txt
+district_info_filename = data_2019_sejm/okregi_sejm_2023.csv
+data_year = 2023
+
+# What to actually do
+
+action = output_seats
+
+# Output configuration
+
+district_names = expanded
+output = stdout
