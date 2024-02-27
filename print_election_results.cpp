@@ -8,7 +8,8 @@
 using std::cout;
 
 int main() {
-  ElectionResults *er = FromFile2019("data_2019_sejm/wyniki_sejm.csv");
+  ElectionResults *er = ElectionResultsFromFile(
+      "data/sejm_election_results/by_district/2019.csv");
   auto district_info = DistrictInfoFromFile2019(
       "data_2019_sejm/okregi_sejm.csv");
   auto district_seats = DistrictsToSeats(district_info);

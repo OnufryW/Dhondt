@@ -11,22 +11,22 @@ using std::cout;
 
 int main() {
   cout << "[ RUNNING ]" << std::endl;
-  auto res = FromFile2019("../data_2019_sejm/wyniki_sejm.csv");
-  assert_eq(res->ByDistrict().size(), (size_t) 41, "Number of districts");
+  auto res = ElectionResultsFromFile(
+      "../data/sejm_election_results/by_district/2019.csv");
+  assert_eq((size_t) 41, res->ByDistrict().size(), "Number of districts");
   auto wroclaw = res->ByDistrict()["3"];
-  assert_eq(wroclaw.DistrictId(), std::string("3"), "district ID");
-  assert_eq(wroclaw.TotalVoters(), 1001757, "citizens");
-  assert_eq(wroclaw.TotalVotes(), 654455, "voters");
-  assert_eq(wroclaw.DistrictName(), std::string("Okręg Wyborczy Nr 3"), "district name");
-  assert_eq(wroclaw.VoteCountByParty().at(
+  assert_eq(std::string("3"), wroclaw.DistrictId(), "district ID");
+  assert_eq(1001757, wroclaw.TotalVoters(), "citizens");
+  assert_eq(654455, wroclaw.TotalVotes(), "voters");
+  assert_eq(42269, wroclaw.VoteCountByParty().at(
       "KOMITET WYBORCZY POLSKIE STRONNICTWO LUDOWE - ZPOW-601-19/19"),
-    42269, "PSL votes");
-  assert_eq(wroclaw.VoteCountByParty().at(
+    "PSL votes");
+  assert_eq(48775, wroclaw.VoteCountByParty().at(
       "KOMITET WYBORCZY KONFEDERACJA WOLNOŚĆ I NIEPODLEGŁOŚĆ - ZPOW-601-5/19"),
-    48775, "Konfederacja votes");
+    "Konfederacja votes");
   auto psl = res->VoteCountsByParty().at(
       "KOMITET WYBORCZY POLSKIE STRONNICTWO LUDOWE - ZPOW-601-19/19");
-  assert_eq(psl["3"], 42269, "By Party PSL in Wroclaw");
-  assert_eq(psl["19"], 65683, "By Party PSL in Warsaw");
+  assert_eq(42269, psl["3"], "By Party PSL in Wroclaw");
+  assert_eq(65683, psl["19"], "By Party PSL in Warsaw");
   cout << "[ OK ]" << std::endl;
 }

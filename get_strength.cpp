@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
   std::vector<std::map<string, std::map<string, int>>> old_res;
   // Get Sejm election results, in committee -> district -> votes format.
   if (ConfigContains(main_config, sejm_results_filename)) {
-    old_res.push_back(FromFile2019(
+    old_res.push_back(ElectionResultsFromFile(
         main_config[sejm_results_filename])->VoteCountsByParty());
   }
   // Get 2020 presidential election results, same format.

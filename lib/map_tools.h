@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <map>
+#include <functional>
 
 // Pivots a map of maps in the other direction. Asserts that the
 // map is actually a full rectangular matrix (or, in other words, that

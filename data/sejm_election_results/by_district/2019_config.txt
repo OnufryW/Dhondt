@@ -1,0 +1,32 @@
+# Config for transforming the 2019 by-district results into the 2023 format.
+# See data/transform_csv_file.py for the format of the config.
+# See the README.md file for the schema transformation.
+
+"Okręg"; $Q1
+"Liczba komisji"; 0
+"Liczba uwzględnionych komisji"; 0
+"Kart przekazane do komisji"; $EQ3
+"Uprawnionych do głosowania"; $EQ4
+"Karty nieużyte"; $EQ5
+"Karty wydane osobiście"; $EQ6
+"Karty wydane pocztą"; $EQ9
+"Karty wydane łącznie"; $IEQ6 + $IEQ9
+"Głosujący przez pełnomocnika"; $EQ7
+"Głosujący z zaświadczeniem"; $EQ8
+"Otrzymane koperty"; $EQ10
+"Koperty bez deklaracji"; $EQ11
+"Koperty z niepodpisaną deklaracją"; $EQ12
+"Koperty bez koperty z głosem"; $EQ13
+"Koperty z niezamnkiętą kopertą z głosem"; $EQ14
+"Koperty z głosem dodane do urny"; $EQ15
+"Karty wyjęte z urny"; $EQ16
+"Karty wyjęte z kopert"; $EQ17
+"Nieważne karty"; $EQ18
+"Ważne karty"; $EQ19
+"Nieważne głosy"; $EQ20
+"Zbyt wiele Xów"; $EQ21
+"Brak Xa"; $EQ22
+"Wykreślona lista"; $EQ23
+"Głosów ważnych łącznie"; $EQ24
+...25;$Q?;$EQ?
+

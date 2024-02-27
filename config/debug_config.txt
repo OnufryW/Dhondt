@@ -1,6 +1,6 @@
 # File configs
 
-sejm_results_filename = data_2019_sejm/wyniki_sejm.csv
+sejm_results_filename = data/sejm_election_results/by_district/2019.csv
 presidential_results_filename = data_2020_president/prezydenckie.csv
 district_info_filename = data_2019_sejm/okregi_sejm.csv
 pkw_citizens_filename = data_2019_sejm/dane_z_listu_pkw.csv

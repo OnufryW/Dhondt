@@ -12,18 +12,15 @@ class DistrictResults {
   DistrictResults() {}
   DistrictResults(std::map<std::string, int> vcbp,
                   std::string id,
-                  std::string name,
                   int total_votes,
                   int total_voters) :
-      vcbp(std::move(vcbp)), id(std::move(id)), name(std::move(name)),
+      vcbp(std::move(vcbp)), id(std::move(id)),
       total_votes(total_votes), total_voters(total_voters) {}
 
   // Map from party name to the number of votes it received.
   const std::map<std::string, int> &VoteCountByParty() { return vcbp; }
   // The ID of the district (e.g., "19").
   const std::string &DistrictId() { return id; }
-  // The name of the district (e.g., "Okręg Wyborczy Nr 19").
-  const std::string &DistrictName() { return name; }
   // The total number of votes cast (should be equal to the sum of all the
   // values in the vcbp map).
   int TotalVotes() { return total_votes; }
@@ -33,7 +30,6 @@ class DistrictResults {
  private:
   std::map<std::string, int> vcbp;
   std::string id;
-  std::string name;
   int total_votes;
   int total_voters;
 };
