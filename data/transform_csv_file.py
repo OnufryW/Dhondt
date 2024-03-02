@@ -24,6 +24,7 @@
 # E: replace an empty string with a zero
 # I: interpret as an integer
 # S: interpret as a string (default)
+# T: Fix teryt code.
 
 # The last line can (does not have to) be a ..., followed by a column reference
 # (that is, an integer), followed by the two parts, where expressions might
@@ -93,5 +94,3 @@ with open(infile, 'r') as inf:
             outf.write(';')
           outf.write(str(c[1].Get(r)))
       outf.write('\n')
-
-

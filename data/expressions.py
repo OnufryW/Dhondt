@@ -96,8 +96,26 @@ class ToString:
   def Get(self, row):
     return str(self.inner.Get(row))
 
+class FixTerytCode:
+  # Takes a 5- or 6-digit TERYT, or empty.
+  # Transforms into a valid 7-digit TERYT.
+  def __init__(self, inner):
+    self.inner = inner
+
+  def Get(self, row):
+    i = self.inner.Get(row)
+    # Special case for foreign codes.
+    assert isinstance(i, str)
+    if not i:
+      return "1499010"
+    i = i + "0"
+    if len(i) < 7:
+      assert len(i) == 6
+      return "0" + i
+    return i
+
 def ParseOperator(code, inner):
-  assert code in 'QCDEIS'
+  assert code in 'QCDEIST'
   if code == 'Q':
     return StripQuote(inner)
   elif code == 'C':
@@ -110,11 +128,13 @@ def ParseOperator(code, inner):
     return ToInt(inner)
   elif code == 'S':
     return ToString(inner)
+  elif code == 'T':
+    return FixTerytCode(inner)
   assert False
 
 
 def ParseReference(config, context_column):
-  if config[0] in 'QCDEIS':
+  if config[0] in 'QCDEIST':
     i = ParseReference(config[1:], context_column)
     return ParseOperator(config[0], i)
   elif config == '?':
