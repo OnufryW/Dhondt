@@ -9,14 +9,26 @@ from tokens import *
 UNARY_FUNCTIONS = {
   'sqrt': lambda a: math.sqrt(a),
   'int': lambda a: int(a),
+  'len': lambda a: len(a),
+  'not': lambda a: not a
 }
 BINARY_FUNCTIONS = {
-  'min': lambda a, b: min(a,b)
+  'min': lambda a, b: min(a,b),
+  'beginning': lambda a, b: a[:b],
+  'end': lambda a, b: a[b:],
+  'and': lambda a, b: a and b,
+  'or': lambda a, b: a or b,
 }
 TERNARY_FUNCTIONS = {
-  'if': lambda a, b, c: b if a else c
+  'if': 'SPECIAL',
+  'substr': lambda a, b, c: a[b:c],
+  'replace': lambda a, b, c: a.replace(b, c),
 }
-FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys())
+RANGE_FUNCTIONS = {
+  'sum_range': (0, lambda a, b: a + b),
+  'and_range': (True, lambda a, b: a and b),
+}
+FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys()) + list(RANGE_FUNCTIONS.keys())
 KEYWORDS = FUNCTION_NAMES + [
   'LOAD', 'DUMP', 'FROM', 'TO', 'SEPARATOR', 'WITH', 'TRANSFORM', 'AS',
   'PARAM', 'PREFIX', 'IMPORT']
@@ -30,18 +42,19 @@ def TryPop(tokens, expected_type=None, expected_value=None):
     return None
   return tokens.pop(0)
 
-def InvalidToken(token, message):
+def InvalidToken(message, token):
   print(*message)
-  print('Actual token is', token.value, 'of type', token.typ)
-  assert False
+  print('Actual token is', token.DebugString())
+  raise ValueError(*message, token.DebugString())
 
 def FailedPop(tokens, message):
   print(*message)
   if not tokens:
     print('Token list empty!')
+    raise ValueError(message, 'Token list empty')
   else:
-    print('First token is', tokens[0].value, 'of type', tokens[0].typ)
-  assert False
+    print('First token is', tokens[0].DebugString())
+    raise ValueError(message, tokens[0].DebugString())
 
 def ForcePop(tokens, expected_type=None, expected_value=None):
   token = TryPop(tokens, expected_type, expected_value)
@@ -56,26 +69,33 @@ def ForcePop(tokens, expected_type=None, expected_value=None):
     FailedPop(tokens, mess)
   return token
 
+def GetNumber(token):
+  if token.typ != NUMBER:
+    InvalidToken(['Unexpected token type when trying to parse number'], token)
+  if token.value.find('.') == -1:
+    return expression.Constant(int(token.value), token)
+  else:
+    return expression.Constant(float(token.value), token)
+
 def GetFactor(tokens):
   token = ForcePop(tokens)
   if token.typ == NUMBER:
-    if token.value.find('.') == -1:
-      return expression.Constant(int(token.value))
-    else:
-      return expression.Constant(float(token.value))
+    return GetNumber(token)
   elif token.typ == WORD:
     if token.value in FUNCTION_NAMES:
       ForcePop(tokens, SYMBOL, '(')
       if token.value in UNARY_FUNCTIONS:
         arg = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.UnaryExpr(arg, UNARY_FUNCTIONS[token.value])
+        return expression.UnaryExpr(
+            arg, UNARY_FUNCTIONS[token.value], token, token.value)
       elif token.value in BINARY_FUNCTIONS:
         arg1 = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ',')
         arg2 = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.BinaryExpr(arg1, arg2, BINARY_FUNCTIONS[token.value])
+        return expression.BinaryExpr(
+            arg1, arg2, BINARY_FUNCTIONS[token.value], token, token.value)
       elif token.value in TERNARY_FUNCTIONS:
         arg1 = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ',')
@@ -83,57 +103,76 @@ def GetFactor(tokens):
         ForcePop(tokens, SYMBOL, ',')
         arg3 = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.TernaryExpr(arg1, arg2, arg3, TERNARY_FUNCTIONS[token.value])
-      assert False
+        if token.value == 'if':
+          return expression.If(arg1, arg2, arg3, token)
+        return expression.TernaryExpr(
+            arg1, arg2, arg3, TERNARY_FUNCTIONS[token.value], token,
+            token.value)
+      elif token.value in RANGE_FUNCTIONS:
+        beg = TryPop(tokens, NUMBER)
+        beg = beg.value if beg else 1
+        ForcePop(tokens, SYMBOL, ':')
+        end = TryPop(tokens, NUMBER)
+        end = end.value if end else -1
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.RangeExpr(int(beg), int(end),
+                                    RANGE_FUNCTIONS[token.value],
+                                    token, token.value)
+      InvalidToken(['Weird function name when trying to get factor'], token)
     elif token.value in KEYWORDS:
-      assert False
+      InvalidToken(['Keyword when trying to get factor'], token)
     else:
-      return expression.Variable(token.value)
+      return expression.Variable(token.value, token)
   elif token.typ == VARIABLE:
-    return expression.Variable(token.value)
+    return expression.Variable(token.value, token)
   elif token.typ == SYMBOL:
     if token.value == '(':
       expr = GetExpression(tokens)
       ForcePop(tokens, SYMBOL, ')')
       return expr
-    assert False
+    if token.value == '-':
+      number_token = ForcePop(tokens, NUMBER)
+      number = GetNumber(number_token)
+      number.val = -number.val
+      return number
+    InvalidToken(['Unexpected symbol when trying to get factor'], token)
   elif token.typ == QUOTED:
-    return expression.Constant(token.value)
-  assert False
+    return expression.Constant(token.value, token)
+  InvalidToken(['Unexpected token when trying to get factor'], token)
 
 def GetProduct(tokens):
   left = GetFactor(tokens)
   while tokens and tokens[0].typ == 'symbol' and tokens[0].value in '*/':
-    token = ForcePop(tokens).value
+    token = ForcePop(tokens)
     right = GetFactor(tokens)
-    if token == '*':
-      left = expression.Product(left, right)
+    if token.value == '*':
+      left = expression.Product(left, right, token)
     else:
-      left = expression.Quotient(left, right)
+      left = expression.Quotient(left, right, token)
   return left
 
 def GetSum(tokens):
   left = GetProduct(tokens)
   while tokens and tokens[0].typ == 'symbol' and tokens[0].value in '+-':
-    token = ForcePop(tokens).value
+    token = ForcePop(tokens)
     right = GetProduct(tokens)
-    if token == '+':
-      left = expression.Sum(left, right)
+    if token.value == '+':
+      left = expression.Sum(left, right, token)
     else:
-      left = expression.Difference(left, right)
+      left = expression.Difference(left, right, token)
   return left
 
 def GetComparison(tokens):
   left = GetSum(tokens)
   if tokens and tokens[0].typ == 'symbol' and tokens[0].value in '<=>':
-    token = ForcePop(tokens).value
+    token = ForcePop(tokens)
     right = GetSum(tokens)
-    if token == '=':
-      return expression.Equal(left, right)
-    elif token == '<':
-      return expression.Lesser(left, right)
+    if token.value == '=':
+      return expression.Equal(left, right, token)
+    elif token.value == '<':
+      return expression.Lesser(left, right, token)
     else:
-      return expression.Greater(left, right)
+      return expression.Greater(left, right, token)
   return left
 
 # Expression grammar
@@ -156,12 +195,14 @@ def GetExpression(tokens):
 def GetOrVar(tokens, allowed_constant_types):
   token = ForcePop(tokens)
   if token.typ == VARIABLE:
-    return command.VariableOrValue(token.value, False)
+    return command.VariableOrValue(token.value, False, token.line,
+                                   token.start, token.end)
   else:
     if token.typ not in allowed_constant_types:
       InvalidToken(token, [
           'GetOrVar token expected types', allowed_constant_types])
-    return command.VariableOrValue(token.value, True)
+    return command.VariableOrValue(token.value, True, token.line,
+                                   token.start, token.end)
 
 def GetQuotedOrVar(tokens):
   return GetOrVar(tokens, [QUOTED])
@@ -172,7 +213,7 @@ def GetWordOrVar(tokens):
 def GetWordOrQuoted(tokens):
   token = ForcePop(tokens)
   if token.typ not in [WORD, QUOTED]:
-    InvalidToken(token, ['Expected word or quoted word'])
+    InvalidToken(['Expected word or quoted word'], token)
   return token.value
 
 def GetLoadTable(tokens):
@@ -205,21 +246,28 @@ def GetImport(tokens):
       if command.EXTRA_PARAMS not in options:
         options[command.EXTRA_PARAMS] = {}
       options[command.EXTRA_PARAMS][key.value] = val
+    elif TryPop(tokens, WORD, 'TABLE'):
+      table_name = GetWordOrVar(tokens)
+      if command.EXTRA_TABLES not in options:
+        options[command.EXTRA_TABLES] = []
+      options[command.EXTRA_TABLES].append(table_name)
     else:
       FailedPop(tokens, ['Invalid optional argument to IMPORT'])
   return command.Import(path, options, GetCommandList)
 
 def GetTransform(tokens):
   source_table = GetWordOrVar(tokens)
-  ForcePop(tokens, WORD, 'TO')
-  target_table = GetWordOrVar(tokens)
+  if TryPop(tokens, WORD, 'TO'):
+    target_table = GetWordOrVar(tokens)
+  else:
+    target_table = None
   ForcePop(tokens, WORD, 'WITH')
   expr_list = []
   while True:
     expr = GetExpression(tokens)
     asorfor = ForcePop(tokens, WORD)
     if asorfor.value not in ['AS', 'FOR']:
-      InvalidToken(asorfor, ['The AS or FOR clause in an expression'])
+      InvalidToken(['The AS or FOR clause in an expression'], asorfor)
     if asorfor.value == 'AS':
       columnname = ForcePop(tokens, WORD).value
       expr_list.append(command.SingleExpression(expr, columnname))
@@ -263,10 +311,12 @@ def GetCommand(tokens):
 #   (Allow 'quoted_or_var' to be STDOUT)
 # import data = IMPORT quoted_or_var [WITH PREFIX word]
 #                                    [WITH PARAM word quoted_or_var]
-# transform = TRANSFORM word_or_variable TO word_or_variable WITH expr_list
+#                                    [WITH TABLE word_or_var]
+# transform = TRANSFORM word_or_variable [TO word_or_variable] WITH expr_list
 # expr_list = expr | expr, expr_list
 # expr = expression AS word | expression FOR range
 # range = integer | integer: | :integer | integer:integer
+# Missing "TO" means that the table is transformed in place.
 # Expressions will be evaluated in a context where we can refer to
 # column values
 # Each 'expression AS word' clause produces a column named 'word' in the
@@ -288,13 +338,7 @@ def GetCommand(tokens):
 #    right joins)
 
 def GetCommandList(lines):
-  to_tokenize = []
-  for line in lines:
-    line = line.strip()
-    if not line or line[0] == '#':
-      continue
-    to_tokenize.append(line)
-  tokens = tokenizer.tokenize('\n'.join(to_tokenize))
+  tokens = tokenizer.tokenize(lines)
   comms = []
   while tokens:
     comms.append(GetCommand(tokens))

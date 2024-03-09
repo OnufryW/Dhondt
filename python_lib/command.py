@@ -13,9 +13,10 @@ import sys
 SEPARATOR = 'separator'
 PREFIX = 'prefix'
 EXTRA_PARAMS = 'extra_params'
+EXTRA_TABLES = 'extra_tables'
 
 class VariableOrValue:
-  def __init__(self, variable_or_value, is_value):
+  def __init__(self, variable_or_value, is_value, line, start, end):
     self.variable_or_value = variable_or_value
     self.is_value = is_value
 
@@ -24,8 +25,11 @@ class VariableOrValue:
       return self.variable_or_value
     else:
       if self.variable_or_value not in params:
-        print('Failed to find parameter', self.variable_or_value,
-              '- present keys are', ' '.join(list(params.keys())))
+        raise ValueError(
+          'Failed to find paramter {} at line {}, positions {}:{}',
+          'Present parameters are {}'.format(
+              self.variable_or_value, self.line, self.start, self.end,
+              ' '.join(list(params.keys()))))
       return params[self.variable_or_value]
 
 class Load:
@@ -108,6 +112,8 @@ class Import:
     self.prefix = '' if PREFIX not in options else options[PREFIX]
     self.extra_params = (
         {} if EXTRA_PARAMS not in options else options[EXTRA_PARAMS])
+    self.extra_tables = (
+        [] if EXTRA_TABLES not in options else options[EXTRA_TABLES])
 
   def Eval(self, context, params):
     path = self.path.Eval(params)
@@ -125,12 +131,17 @@ class Import:
     rootpath = os.path.dirname(os.path.abspath(path))
     oldpath = os.getcwd()
     os.chdir(rootpath)
-    # Step four: actually execute child command.
+    # Step four: prepare child context.
     child_context = {}
+    for table in self.extra_tables:
+      table_name = table.Eval(params)
+      assert table_name in context
+      child_context[table_name] = context[table_name]
+    # Step five: actually execute child
     child_command.Eval(child_context, child_params)
-    # Step five: roll back the directory shift
+    # Step six: roll back the directory shift
     os.chdir(oldpath)
-    # Step six: copy results of child execution into parent context
+    # Step seven: copy results of child execution into parent context
     for table in child_context:
       new_table_name = self.prefix + table
       assert new_table_name not in context
@@ -145,8 +156,13 @@ class SingleExpression:
     assert self.columnname not in new_header
     new_header[self.columnname] = len(new_header)
 
-  def AppendValues(self, context, row):
-    row.append(self.expr.Eval(context))
+  def AppendValues(self, context, row, header, input_row):
+    try:
+      row.append(self.expr.Eval(context))
+    except Exception as e:
+      msg = 'Failure evaluating {} (column {}) for row {}'
+      raise ValueError(msg.format(
+          self.columnname, len(row) + 1, input_row)) from e
 
 class RangeExpression:
   def __init__(self, expr, range_beg, range_end):
@@ -162,10 +178,18 @@ class RangeExpression:
     for col in range(self.range_beg, self.range_end):
       new_header[old_header_rev[col]] = len(new_header)
 
-  def AppendValues(self, context, row):
+  def AppendValues(self, context, row, header, input_row):
     for x in range(self.range_beg, self.range_end):
       context['?'] = context[str(x + 1)]
-      row.append(self.expr.Eval(context))
+      try:
+        row.append(self.expr.Eval(context))
+      except Exception as e:
+        header_rev = {}
+        for name in header:
+          header_rev[header[name]] = name
+        msg = 'Failure evaluating {} (column {} in range {}-{}) for row {}'
+        raise ValueError(msg.format(header_rev[x], x+1, self.range_beg+1,
+                                    self.range_end+1, input_row)) from e
     del context['?']
 
 class Transform:
@@ -176,9 +200,12 @@ class Transform:
 
   def Eval(self, context, params):
     source_table = self.source_table.Eval(params)
-    target_table = self.target_table.Eval(params)
     assert source_table in context
-    assert target_table not in context
+    if self.target_table is not None:
+      target_table = self.target_table.Eval(params)
+      assert target_table not in context
+    else:
+      target_table = source_table
     header, rows = context[source_table]
     new_header = {}
     for expr in self.expr_list:
@@ -194,7 +221,7 @@ class Transform:
       for x in header:
         expr_context[x] = row[header[x]]
       for expr in self.expr_list:
-        expr.AppendValues(expr_context, new_row)
+        expr.AppendValues(expr_context, new_row, header, row)
       assert len(new_row) == len(new_header)
       new_rows.append(new_row)
     context[target_table] = (new_header, new_rows)

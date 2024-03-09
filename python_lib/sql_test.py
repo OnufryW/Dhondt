@@ -5,10 +5,10 @@ import sql
 import tokenizer
 
 def tokenValues(s):
-  return [t.value for t in tokenizer.tokenize(s)]
+  return [t.value for t in tokenizer.tokenize([s])]
 
 def fullTokens(s):
-  return [t.value + '$' + t.typ for t in tokenizer.tokenize(s)]
+  return [t.value + '$' + t.typ for t in tokenizer.tokenize([s])]
 
 class TestTokenize(unittest.TestCase):
   def test_empty(self):
@@ -44,7 +44,7 @@ class TestTokenize(unittest.TestCase):
                      fullTokens('A = 4'))
 
 def evaluate(s, c={}):
-  return sql.GetExpression(tokenizer.tokenize(s)).Eval(c)
+  return sql.GetExpression(tokenizer.tokenize([s])).Eval(c)
 
 class TestExpression(unittest.TestCase):
   def test_integer(self):
@@ -88,6 +88,10 @@ class TestExpression(unittest.TestCase):
   def test_if_clause(self):
     self.assertEqual(3, evaluate('if(2 = 2, 3, 4)'))
     self.assertEqual(4, evaluate('1 + if(3 > 1, 3, 1) * if(3 < 1, 3, 1)'))
+
+  def test_range_sum(self):
+    self.assertEqual(9, evaluate('sum_range(2:5)',
+                                 {'1': 1, '2': 2, '3': 3, '4': 4}))
 
 class TempFile(object):
   def __init__(self, path, lines):
@@ -188,6 +192,16 @@ class TestCommandList(unittest.TestCase):
     with TempFile('in', content):
       with TempFile('config', child_command):
         outfile = ExecAndRead(command, 'out.ssv', {'child_infile': 'in'})
+    self.assertEqual(content, outfile)
+
+  def test_import_with_table(self):
+    content = SomeContent()
+    command = ['LOAD table FROM "in.ssv";',
+               'IMPORT "config" WITH TABLE table WITH PREFIX v;']
+    child_command = ['DUMP table TO "out.ssv";']
+    with TempFile('in.ssv', content):
+      with TempFile('config', child_command):
+        outfile = ExecAndRead(command, 'out.ssv')
     self.assertEqual(content, outfile)
   
   def test_recursive_import(self):

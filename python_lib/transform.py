@@ -1,4 +1,4 @@
-# Usage: python3 runsql.py PATH_TO_CONFIG_FILE [PARAM_NAME PARAM_VAL]*
+# Usage: python3 transform.py PATH_TO_CONFIG_FILE [PARAM_NAME PARAM_VAL]*
 
 import sys
 

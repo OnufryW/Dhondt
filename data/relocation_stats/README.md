@@ -1,4 +1,5 @@
-Contains configs for relocation and right to vote data.
+Contains configs for relocation and right to vote data for 2023 Sejm
+elections.
 
 "Relocation" means a voter applied to change his assigned place of voting
 as a one-time change prior to the vote.
@@ -16,4 +17,4 @@ data is listed in the PKW data, and not here.
 
 To obtain an SSV (semicolon-separated values) dump of any of the tables,
 
-python3 ../../python_lib/transform.py ../dump.cfg infile $CFG_FILE outfile $TARGET_FILE
+python3 ../../python_lib/transform.py ../dump.cfg i $CFG_FILE

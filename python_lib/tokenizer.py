@@ -1,73 +1,89 @@
 # This is the tokenizer for sql.py
 from tokens import *
 
-def consumeWord(s, tokenList):
+# Note to self: There's a lot of quadratic line parsing here. I've initially
+# not passed curpos around, just used s truncating. However, I've added
+# curpos for debugging reasons. So, now, the code could be changed not to
+# modify s, just to modify curpos and operate on the immutable line.
+
+def consumeWord(s, tokenList, line, curpos):
+  pos = 0
   if s and s[0].isalpha():
-    pos = 0
     while pos < len(s) and (s[pos].isalnum() or s[pos] == '_'):
       pos += 1
-    tokenList.append(Token(s[:pos], WORD))
+    tokenList.append(Token(s[:pos], WORD, line, curpos, curpos + pos))
     s = s[pos:]
-  return s
+  return curpos + pos, s
 
-def consumeQuotedWord(s, tokenList):
+def consumeQuotedWord(s, tokenList, line, curpos):
   if s and (s[0] == '"' or s[0] == '\''):
     quote = s[0]
     endpos = 1
     while s[endpos] != quote:
       endpos += 1
-    tokenList.append(Token(s[1:endpos], QUOTED))
+    tokenList.append(
+        Token(s[1:endpos], QUOTED, line, curpos, curpos+endpos+1))
     s = s[endpos+1:]
-  return s
+    return curpos + endpos + 1, s
+  return curpos, s
 
-def consumeVariable(s, tokenList):
+def consumeVariable(s, tokenList, line, curpos):
   if s and s[0] == '$':
     pos = 1
     while pos < len(s) and (s[pos].isalnum() or s[pos] == '_'):
       pos += 1
-    tokenList.append(Token(s[1:pos], VARIABLE))
+    tokenList.append(Token(s[1:pos], VARIABLE, line, curpos, curpos+pos))
     s = s[pos:]
-  return s
+    return curpos + pos, s
+  return curpos, s
 
-def consumeWildcard(s, tokenList):
+def consumeWildcard(s, tokenList, line, curpos):
   if s.startswith('$?'):
-    tokenList.append(Token('?', VARIABLE))
+    tokenList.append(Token('?', VARIABLE, line, curpos, curpos+2))
     s = s[2:]
-  return s
+    return curpos + 2, s
+  return curpos, s
 
-def consumeSpace(s, tokenList):
+def consumeSpace(s, tokenList, line, curpos):
   if s and s[0].isspace():
     s = s[1:]
-  return s
+    return curpos + 1, s
+  return curpos, s
 
-def consumeNumber(s, tokenList):
+def consumeNumber(s, tokenList, line, curpos):
+  pos = 0
   if s and s[0].isnumeric():
-    pos = 0
     while pos < len(s) and (s[pos].isnumeric() or s[pos] == '.'):
       pos += 1
-    tokenList.append(Token(s[:pos], NUMBER))
+    tokenList.append(Token(s[:pos], NUMBER, line, curpos, curpos+pos))
     s = s[pos:]
-  return s
+  return curpos + pos, s
 
-def consumeSymbol(s, tokenList):
-  if s and s[0] in '+-=*/,();:<>':
-    tokenList.append(Token(s[0], SYMBOL))
+def consumeSymbol(s, tokenList, line, curpos):
+  if s and s[0] in '+-=*/,();:<>[]':
+    tokenList.append(Token(s[0], SYMBOL, line, curpos, curpos+1))
     s = s[1:]
-  return s
+    return curpos + 1, s
+  return curpos, s
 
-def tokenize(s):
+def tokenize(lines):
   res = []
-  while s:
-    curlen = len(s)
-    s = consumeWord(s, res)
-    s = consumeQuotedWord(s, res)
+  for l, s in enumerate(lines):
+    if not s.strip() or s.strip()[0] == '#':
+      continue
+    curbeg = 0
+    while s:
+      curlen = len(s)
+      curbeg, s = consumeWord(s, res, l, curbeg)
+      curbeg, s = consumeQuotedWord(s, res, l, curbeg)
     # Note: ConsumeWildcard has to go just before ConsumeVariable
-    s = consumeWildcard(s, res)
-    s = consumeVariable(s, res)
-    s = consumeSpace(s, res)
-    s = consumeNumber(s, res)
-    s = consumeSymbol(s, res)
-    if len(s) == curlen:
-      raise ValueError('Failed to consume a token from ' + s)
+      curbeg, s = consumeWildcard(s, res, l, curbeg)
+      curbeg, s = consumeVariable(s, res, l, curbeg)
+      curbeg, s = consumeSpace(s, res, l, curbeg)
+      curbeg, s = consumeNumber(s, res, l, curbeg)
+      curbeg, s = consumeSymbol(s, res, l, curbeg)
+      if len(s) == curlen:
+        raise ValueError(
+            'Failed to consume a token on line', l, 'position', curbeg,
+            ' - remaining string', s)
   return res
-
