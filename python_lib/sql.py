@@ -28,7 +28,12 @@ RANGE_FUNCTIONS = {
   'sum_range': (0, lambda a, b: a + b),
   'and_range': (True, lambda a, b: a and b),
 }
-FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys()) + list(RANGE_FUNCTIONS.keys())
+AGGREGATE_FUNCTIONS = {
+  'sum': (0, lambda a, b: a + b),
+  'max': (None, lambda a, b: b if a is None else max(a,b)),
+  'and': (0, lambda a, b: a + b),
+}
+FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys()) + list(RANGE_FUNCTIONS.keys()) + list(AGGREGATE_FUNCTIONS.keys())
 KEYWORDS = FUNCTION_NAMES + [
   'LOAD', 'DUMP', 'FROM', 'TO', 'SEPARATOR', 'WITH', 'TRANSFORM', 'AS',
   'PARAM', 'PREFIX', 'IMPORT']
@@ -118,6 +123,24 @@ def GetFactor(tokens):
         return expression.RangeExpr(int(beg), int(end),
                                     RANGE_FUNCTIONS[token.value],
                                     token, token.value)
+      elif token.value in AGGREGATE_FUNCTIONS:
+        arg = TryPop(tokens, NUMBER)
+        if arg is not None:
+          arg = str(arg.value)
+        if not arg:
+          arg = TryPop(tokens, WORD)
+          if arg is not None:
+            arg = arg.value
+        if not arg:
+          arg = TryPop(tokens, VARIABLE)
+          if arg is not None:
+            arg = arg.value
+        if not arg:
+          InvalidToken(['Trying to get an argument for an aggregat function'],
+                       token)
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.AggregateExpr(arg, AGGREGATE_FUNCTIONS[token.value],
+                                        token, token.value)
       InvalidToken(['Weird function name when trying to get factor'], token)
     elif token.value in KEYWORDS:
       InvalidToken(['Keyword when trying to get factor'], token)
@@ -255,13 +278,7 @@ def GetImport(tokens):
       FailedPop(tokens, ['Invalid optional argument to IMPORT'])
   return command.Import(path, options, GetCommandList)
 
-def GetTransform(tokens):
-  source_table = GetWordOrVar(tokens)
-  if TryPop(tokens, WORD, 'TO'):
-    target_table = GetWordOrVar(tokens)
-  else:
-    target_table = None
-  ForcePop(tokens, WORD, 'WITH')
+def GetExprList(tokens):
   expr_list = []
   while True:
     expr = GetExpression(tokens)
@@ -279,9 +296,49 @@ def GetTransform(tokens):
       range_end = int(range_end_token.value) if range_end_token else -1
       expr_list.append(command.RangeExpression(expr, range_begin, range_end))
     if TryPop(tokens, SYMBOL, ',') is None:
-      break
+      return expr_list
+
+def GetTransform(tokens):
+  source_table = GetWordOrVar(tokens)
+  if TryPop(tokens, WORD, 'TO'):
+    target_table = GetWordOrVar(tokens)
+  else:
+    target_table = None
+  ForcePop(tokens, WORD, 'WITH')
+  expr_list = GetExprList(tokens)
   return command.Transform(source_table, target_table, expr_list)
 
+# aggregate = AGGREGATE word_or_variable [TO word_or_variable]
+#     [ BY column_list ] WITH expr_list
+# column_list = var_or_word | var_or_word, column_list
+# The column list is the "group by" clause, if missing, all to one row.
+# The expressions can also include aggregate functions.
+def GetAggregate(tokens):
+  source_table = GetWordOrVar(tokens)
+  if TryPop(tokens, WORD, 'TO'):
+    target_table = GetWordOrVar(tokens)
+  else:
+    target_table = None
+  group_list = []
+  if TryPop(tokens, WORD, 'BY'):
+    while True:
+      group_key = None
+      if word := TryPop(tokens, WORD):
+        group_key = word.value
+      elif var := TryPop(tokens, VARIABLE):
+        try:
+          group_key = int(var.value)
+        except ValueError:
+          group_key = var.value
+      else:
+        FailedPop(tokens, ['Word or variable expected as group key'])
+      group_list.append(group_key)
+      if TryPop(tokens, SYMBOL, ',') is None:
+        break
+  ForcePop(tokens, WORD, 'WITH')
+  expr_list = GetExprList(tokens)
+  return command.Aggregate(source_table, target_table, group_list, expr_list)
+      
 
 def GetBody(tokens):
   if TryPop(tokens, WORD, 'LOAD'):
@@ -292,7 +349,9 @@ def GetBody(tokens):
     return GetImport(tokens)
   elif TryPop(tokens, WORD, 'TRANSFORM'):
     return GetTransform(tokens)
-  # TODO: Transforms, joins and aggregates go here.
+  elif TryPop(tokens, WORD, 'AGGREGATE'):
+    return GetAggregate(tokens)
+  # TODO: Joins go here.
   else:
     FailedPop(tokens, ['Invalid command'])
 
@@ -304,6 +363,8 @@ def GetCommand(tokens):
 # Command grammar:
 # command = body ;
 # body = load_table | dump_table | transform_table | join_tables
+
+####### File operations
 # load_table = LOAD word FROM quoted_or_var [WITH SEPARATOR word]
 #   (TODO: loading options: with/without header? SSV format?)
 # dump_table = DUMP word TO quoted_or_var
@@ -312,6 +373,8 @@ def GetCommand(tokens):
 # import data = IMPORT quoted_or_var [WITH PREFIX word]
 #                                    [WITH PARAM word quoted_or_var]
 #                                    [WITH TABLE word_or_var]
+
+####### Transformations
 # transform = TRANSFORM word_or_variable [TO word_or_variable] WITH expr_list
 # expr_list = expr | expr, expr_list
 # expr = expression AS word | expression FOR range
@@ -330,7 +393,13 @@ def GetCommand(tokens):
 # quoted_or_var = quoted | variable
 # word_or_var = word | variable
 
-# TODO: aggregations
+####### Aggregations.
+# aggregate = AGGREGATE word_or_variable [TO word_or_variable]
+#     BY column_list WITH expr_list
+# column_list = {empty} | var_or_word | var_or_word, column_list
+# The column list is the "group by" clause.
+# The expressions can also include aggregate functions.
+
 # TODO: pivoting the table.
 # TODO join_tables = ...
 #   (TODO: This, I think, is simpler, take two tables, create a table that

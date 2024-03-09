@@ -192,6 +192,16 @@ class RangeExpression:
                                     self.range_end+1, input_row)) from e
     del context['?']
 
+def SourceAndTarget(source, target, context, params):
+  source_table = source.Eval(params)
+  assert source_table in context
+  if target is not None:
+    target_table = target.Eval(params)
+    assert target_table not in context
+  else:
+    target_table = source_table
+  return source_table, target_table
+
 class Transform:
   def __init__(self, source_table, target_table, expr_list):
     self.source_table = source_table
@@ -199,13 +209,8 @@ class Transform:
     self.expr_list = expr_list
 
   def Eval(self, context, params):
-    source_table = self.source_table.Eval(params)
-    assert source_table in context
-    if self.target_table is not None:
-      target_table = self.target_table.Eval(params)
-      assert target_table not in context
-    else:
-      target_table = source_table
+    source_table, target_table = SourceAndTarget(
+        self.source_table, self.target_table, context, params)
     header, rows = context[source_table]
     new_header = {}
     for expr in self.expr_list:
@@ -222,6 +227,64 @@ class Transform:
         expr_context[x] = row[header[x]]
       for expr in self.expr_list:
         expr.AppendValues(expr_context, new_row, header, row)
+      assert len(new_row) == len(new_header)
+      new_rows.append(new_row)
+    context[target_table] = (new_header, new_rows)
+
+class Aggregate:
+  def __init__(self, source_table, target_table, group_list, expr_list):
+    self.source_table = source_table
+    self.target_table = target_table
+    self.group_list = group_list
+    self.expr_list = expr_list
+
+  def Eval(self, context, params):
+    source_table, target_table = SourceAndTarget(
+        self.source_table, self.target_table, context, params)
+    header, rows = context[source_table]
+    reverse_header = {}
+    for title in header:
+      reverse_header[header[title]] = title  
+    group_keys = []
+    for group_key in self.group_list:
+      if isinstance(group_key, int):
+        group_keys.append((group_key - 1, reverse_header[group_key - 1]))
+      else:
+        group_keys.append((header[group_key], group_key))
+
+    new_header = {}
+    for expr in self.expr_list:
+      expr.AppendHeader(new_header, header)
+    new_rows = []
+
+    # Aggregate
+    groups = {}
+    for row in rows:
+      agg_key = []
+      for key in group_keys:
+        agg_key.append(row[key[0]])
+      agg_key = tuple(agg_key)
+      if agg_key not in groups:
+        groups[agg_key] = []
+      groups[agg_key].append(row)
+
+    for agg_key in groups:
+      # Construct the expression evaluation context
+      expr_context = {}
+      rows = groups[agg_key]
+      # Add the group key columns to context.
+      for group_key in group_keys:
+        expr_context[str(group_key[0] + 1)] = rows[0][group_key[0]]
+        expr_context[group_key[1]] = rows[0][group_key[0]]
+      aggregates = {}
+      for x in header:
+        agglist = [r[header[x]] for r in rows]
+        aggregates[x] = agglist
+        aggregates[str(header[x] + 1)] = agglist
+      expr_context['__aggregates'] = aggregates
+      new_row = []
+      for expr in self.expr_list:
+        expr.AppendValues(expr_context, new_row, header, group_keys)
       assert len(new_row) == len(new_header)
       new_rows.append(new_row)
     context[target_table] = (new_header, new_rows)

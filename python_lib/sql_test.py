@@ -93,6 +93,10 @@ class TestExpression(unittest.TestCase):
     self.assertEqual(9, evaluate('sum_range(2:5)',
                                  {'1': 1, '2': 2, '3': 3, '4': 4}))
 
+  def test_aggregate(self):
+    self.assertEqual(9, evaluate('sum(arg)',
+                                 {'__aggregates': {'arg': [2, 3, 4]}}))
+
 class TempFile(object):
   def __init__(self, path, lines):
     self.path = path
@@ -267,6 +271,64 @@ class TestTransform(unittest.TestCase):
     command = '$? FOR 2:4'
     expected = ['ColB;ColC', '2;3']
     self.assertEqual(expected, Transform(content, command))
+
+def Aggregate(content, aggregate):
+  command = [
+      'LOAD table FROM "in";',
+      'TRANSFORM table WITH int($?) FOR 1:;',
+      aggregate,
+      'DUMP newt TO "out";']
+  with TempFile('in', content):
+    return ExecAndRead(command, 'out')
+
+def SimpleAggregate(content, group, exprs):
+  return Aggregate(
+    content,
+    'AGGREGATE table TO newt BY ' + group + ' WITH ' + exprs + ';')
+
+class TestAggregate(unittest.TestCase):
+  def test_aggregate_in_place(self):
+    content = ['ColA', '1', '2']
+    command = ['LOAD table FROM "in";',
+               'AGGREGATE table WITH 1 AS one;',
+               'DUMP table TO "out";']
+    expected = ['one', '1']
+    with TempFile('in', content):
+      self.assertEqual(expected, ExecAndRead(command, 'out'))
+
+  def test_empty_key_list(self):
+    command = 'AGGREGATE table TO newt WITH sum($1) AS sA, sum($2) AS sB;'
+    content = ['A;B', '1;2', '0;2', '0;3']
+    expected = ['sA;sB', '1;7']
+    self.assertEqual(expected, Aggregate(content, command))
+
+  def test_full_split(self):
+    content = ['ColA;ColB', '1;1', '2;2']
+    groups = '$1'
+    exprs = 'ColA AS ColA, sum(ColB) AS ColB'
+    expected = ['ColA;ColB', '1;1', '2;2']
+    self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
+
+  def test_actual_grouping(self):
+    content = ['A;B;C', '1;1;1', '1;1;2', '1;2;0', '2;1;0', '2;2;7', '2;2;0']
+    groups = 'A, $2'
+    exprs = '$1 AS a, B AS b, sum(C) AS c'
+    expected = ['a;b;c', '1;1;3', '1;2;0', '2;1;0', '2;2;7']
+    self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
+
+  def test_non_contiguous_rows(self):
+    content = ['X;Y', '1;1', '2;2', '1;1']
+    groups = 'X'
+    exprs = 'sum(Y) AS s'
+    expected = ['s', '2', '2']
+    self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
+  
+  def test_complex_expression(self):
+    content = ['A;B;C;D', '1;2;3;4', '1;4;9;16', '2;3;3;4']
+    groups = 'D'
+    exprs = 'D AS D, sum(A) + max(B) + D - max(C) * max(C) AS res'
+    expected = ['D;res', '4;1', '16;-60']
+    self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
 
 if __name__ == '__main__':
   unittest.main()

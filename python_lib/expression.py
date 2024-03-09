@@ -15,6 +15,37 @@ class Expression:
   def ErrorStr(self):
     return 'Failed to evaluate ' + self.DebugString()
 
+class AggregateExpr(Expression):
+  def __init__(self, aggregated_column, acc, token, descr):
+    super().__init__(token, descr)
+    self.aggregated_column = aggregated_column
+    self.base = acc[0]
+    self.op = acc[1]
+
+  # For aggregated expressions, the context includes a special key,
+  # __aggregates, which stores the aggregated data. This value of this key
+  # is a standard 'context' map where values are not individual elements, 
+  # but lists (where the list is the full list of values that grouped up to
+  # the row we're currently evaluating).
+  def Eval(self, context):
+    if '__aggregates' not in context:
+      raise ValueError(self.ErrorStr(),
+                       'Cannot evaluate outside of aggregations')
+    aggregates = context['__aggregates']
+    if self.aggregated_column not in aggregates:
+      raise ValueError(
+          self.ErrorStr(),
+          'Name {} is not one of the aggregated variables: {}'.format(
+              self.aggregated_column, aggregates.keys()))
+    acc = self.base
+    for val in aggregates[self.aggregated_column]:
+      try:
+        acc = self.op(acc, val)
+      except Exception as e:
+        raise ValueError(self.ErrorStr(),
+            'When accumulating {} to {}'.format(acc, val)) from e
+    return acc
+
 class BinaryExpr(Expression):
   def __init__(self, left, right, op, token, descr):
     super().__init__(token, descr)
