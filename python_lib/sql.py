@@ -124,20 +124,7 @@ def GetFactor(tokens):
                                     RANGE_FUNCTIONS[token.value],
                                     token, token.value)
       elif token.value in AGGREGATE_FUNCTIONS:
-        arg = TryPop(tokens, NUMBER)
-        if arg is not None:
-          arg = str(arg.value)
-        if not arg:
-          arg = TryPop(tokens, WORD)
-          if arg is not None:
-            arg = arg.value
-        if not arg:
-          arg = TryPop(tokens, VARIABLE)
-          if arg is not None:
-            arg = arg.value
-        if not arg:
-          InvalidToken(['Trying to get an argument for an aggregat function'],
-                       token)
+        arg = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ')')
         return expression.AggregateExpr(arg, AGGREGATE_FUNCTIONS[token.value],
                                         token, token.value)

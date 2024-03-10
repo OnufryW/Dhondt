@@ -95,7 +95,7 @@ class TestExpression(unittest.TestCase):
 
   def test_aggregate(self):
     self.assertEqual(9, evaluate('sum(arg)',
-                                 {'__aggregates': {'arg': [2, 3, 4]}}))
+                                 {'__group_context': [{'arg': 3}, {'arg': 6}]}))
 
 class TempFile(object):
   def __init__(self, path, lines):
@@ -328,6 +328,13 @@ class TestAggregate(unittest.TestCase):
     groups = 'D'
     exprs = 'D AS D, sum(A) + max(B) + D - max(C) * max(C) AS res'
     expected = ['D;res', '4;1', '16;-60']
+    self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
+
+  def test_inner_expression(self):
+    content = ['A;B;C', '1;4;2', '1;6;3', '2;2;2']
+    groups = 'A'
+    exprs = 'A AS A, int(sum(B / C)) AS sum_of_quotients'
+    expected = ['A;sum_of_quotients', '1;4', '2;1']
     self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
 
 if __name__ == '__main__':

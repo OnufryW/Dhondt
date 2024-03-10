@@ -242,20 +242,60 @@ class Aggregate:
     source_table, target_table = SourceAndTarget(
         self.source_table, self.target_table, context, params)
     header, rows = context[source_table]
-    reverse_header = {}
-    for title in header:
-      reverse_header[header[title]] = title  
-    group_keys = []
-    for group_key in self.group_list:
-      if isinstance(group_key, int):
-        group_keys.append((group_key - 1, reverse_header[group_key - 1]))
-      else:
-        group_keys.append((header[group_key], group_key))
 
+    # Define the new header.
     new_header = {}
     for expr in self.expr_list:
       expr.AppendHeader(new_header, header)
+
+    # Accumulate the set of group keys.
+    group_keys = set()
+    for group_key in self.group_list:
+      if isinstance(group_key, int):
+        group_keys.add(group_key - 1)
+      else:
+        assert group_key in header
+        group_keys.add(header[group_key])
+
+    # Accumulate the set of groups, and rows associated with each.
+    groups = {}
+    for row in rows:
+      agg_key = tuple([row[key] for key in group_keys])
+      if agg_key not in groups:
+        groups[agg_key] = []
+      groups[agg_key].append(row)
+    
+    # Calculate the new rows.
     new_rows = []
+    for agg_key in groups:
+      # Define the evaluation context.
+      # TODO: Rename "group_context" to "context"
+      group_context = {'__group_context': [{} for _ in groups[agg_key]]}
+      for column in header:
+        col_num = header[column]
+        if header[column] in group_keys:
+          group_context[column] = groups[agg_key][0][col_num]
+          group_context[str(col_num + 1)] = groups[agg_key][0][col_num]
+        else:
+          for i, row in enumerate(groups[agg_key]):
+            row_context = group_context['__group_context'][i]
+            row_context[column] = row[col_num]
+            row_context[str(col_num + 1)] = row[col_num]
+      # The 'debug' row value
+      debug_row = [
+          group_context[x] for x in group_context if x != '__group_context']
+      # Calculate the expressions.
+      new_row = []
+      for expr in self.expr_list:
+        # TODO:  
+        expr.AppendValues(group_context, new_row, header, debug_row)
+      assert len(new_row) == len(new_header)
+      new_rows.append(new_row)
+
+    context[target_table] = (new_header, new_rows)
+      
+    """      
+    ### OLD STUFF
 
     # Aggregate
     groups = {}
@@ -267,6 +307,13 @@ class Aggregate:
       if agg_key not in groups:
         groups[agg_key] = []
       groups[agg_key].append(row)
+
+    for agg_key in groups:
+      # Construct the expression context and group context.
+      expr_context = {}
+      group_context = {}
+      for column in header:
+        
 
     for agg_key in groups:
       # Construct the expression evaluation context
@@ -288,4 +335,4 @@ class Aggregate:
       assert len(new_row) == len(new_header)
       new_rows.append(new_row)
     context[target_table] = (new_header, new_rows)
-
+    """

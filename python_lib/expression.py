@@ -16,9 +16,9 @@ class Expression:
     return 'Failed to evaluate ' + self.DebugString()
 
 class AggregateExpr(Expression):
-  def __init__(self, aggregated_column, acc, token, descr):
+  def __init__(self, child, acc, token, descr):
     super().__init__(token, descr)
-    self.aggregated_column = aggregated_column
+    self.child = child
     self.base = acc[0]
     self.op = acc[1]
 
@@ -28,17 +28,17 @@ class AggregateExpr(Expression):
   # but lists (where the list is the full list of values that grouped up to
   # the row we're currently evaluating).
   def Eval(self, context):
-    if '__aggregates' not in context:
+    # __group_context stores a list of sub-contexts, one for each row.
+    # We Eval the child expression in the context of every row, one
+    # by one, and then apply the aggregation.
+    if '__group_context' not in context:
       raise ValueError(self.ErrorStr(),
-                       'Cannot evaluate outside of aggregations')
-    aggregates = context['__aggregates']
-    if self.aggregated_column not in aggregates:
-      raise ValueError(
-          self.ErrorStr(),
-          'Name {} is not one of the aggregated variables: {}'.format(
-              self.aggregated_column, aggregates.keys()))
+                       'Cannot evaluate outside of aggregation context')
     acc = self.base
-    for val in aggregates[self.aggregated_column]:
+    for inner_context in context['__group_context']:
+      row_context = context | inner_context
+      del row_context['__group_context']
+      val = self.child.Eval(row_context)
       try:
         acc = self.op(acc, val)
       except Exception as e:
