@@ -1,8 +1,8 @@
 # Defines an (implicit) command class that operates (and possibly modifies)
-# the context, which is implicitly a dict of in-memory tables (keyed by name).
+# the 'tables', which is implicitly a dict of in-memory tables (keyed by name).
 # The internal representation of a table is a pair:
-# - a list of lists (the rows)
 # - a dict (which maps column names to row indices, zero indexed)
+# - a list of lists (the rows)
 #
 # Commands also take 'params', which are a string-to-string mapping
 # of parameters that affect execution.
@@ -32,8 +32,17 @@ class VariableOrValue:
               ' '.join(list(params.keys()))))
       return params[self.variable_or_value]
 
-class Load:
-  def __init__(self, name, path, options={}):
+class Command:
+  def __init__(self, line, command):
+    self.line = line
+    self.command = command
+
+  def ErrorStr(self):
+    return self.command + ' in line ' + str(self.line + 1)
+
+class Load(Command):
+  def __init__(self, line, name, path, options={}):
+    super().__init__(line, 'LOAD')
     self.name = name
     self.path = path
     self.options = options
@@ -62,14 +71,15 @@ class Load:
     assert header is not None
     return (header, rows)
 
-  def Eval(self, context, params):
-    assert self.name not in context
+  def Eval(self, tables, params):
+    assert self.name not in tables
     path = self.path.Eval(params)
     with open(path, 'r') as inf:
-      context[self.name] = self.ReadLines(inf.readlines())
+      tables[self.name] = self.ReadLines(inf.readlines())
 
-class Dump:
-  def __init__(self, name, path, options={}):
+class Dump(Command):
+  def __init__(self, line, name, path, options={}):
+    super().__init__(line, 'DUMP')
     self.name = name
     self.path = path
     self.options = options
@@ -83,11 +93,11 @@ class Dump:
       outf.write(self.options[SEPARATOR].join([str(x) for x in row]) + '\n')
 
   # Dump into a headered SSV file
-  def Eval(self, context, params):
+  def Eval(self, tables, params):
     name = self.name.Eval(params)
     path = self.path.Eval(params)
-    assert name in context
-    header, rows = context[name]
+    assert name in tables
+    header, rows = tables[name]
     if path == 'stdout':
       self.WriteLines(header, rows, sys.stdout)
     else:
@@ -99,14 +109,15 @@ class Sequence:
   def __init__(self, seq):
     self.seq = seq
 
-  def Eval(self, context, params):
+  def Eval(self, tables, params):
     for comm in self.seq:
-      comm.Eval(context, params)
+      comm.Eval(tables, params)
 
 # A request to execute another file. The parser is passed in, because
 # there's a circular dependency here I need to resolve somehow.
-class Import:
-  def __init__(self, path, options, parser):
+class Import(Command):
+  def __init__(self, line, path, options, parser):
+    super().__init__(line, 'IMPORT')
     self.path = path
     self.parser = parser
     self.prefix = '' if PREFIX not in options else options[PREFIX]
@@ -115,7 +126,7 @@ class Import:
     self.extra_tables = (
         [] if EXTRA_TABLES not in options else options[EXTRA_TABLES])
 
-  def Eval(self, context, params):
+  def Eval(self, tables, params):
     path = self.path.Eval(params)
     # Step one: Parse the relevant file.
     with open(path, 'r') as config_file:
@@ -131,21 +142,21 @@ class Import:
     rootpath = os.path.dirname(os.path.abspath(path))
     oldpath = os.getcwd()
     os.chdir(rootpath)
-    # Step four: prepare child context.
-    child_context = {}
+    # Step four: prepare child tables.
+    child_tables = {}
     for table in self.extra_tables:
       table_name = table.Eval(params)
-      assert table_name in context
-      child_context[table_name] = context[table_name]
+      assert table_name in tables
+      child_tables[table_name] = tables[table_name]
     # Step five: actually execute child
-    child_command.Eval(child_context, child_params)
+    child_command.Eval(child_tables, child_params)
     # Step six: roll back the directory shift
     os.chdir(oldpath)
-    # Step seven: copy results of child execution into parent context
-    for table in child_context:
+    # Step seven: copy results of child execution into parent tables
+    for table in child_tables:
       new_table_name = self.prefix + table
-      assert new_table_name not in context
-      context[new_table_name] = child_context[table]
+      assert new_table_name not in tables
+      tables[new_table_name] = child_tables[table]
 
 class SingleExpression:
   def __init__(self, expr, columnname):
@@ -194,26 +205,35 @@ class RangeExpression:
                                     self.range_end+1, input_row)) from e
     del context['__dynamic']['?']
 
-def SourceAndTarget(source, target, context, params):
+def SourceAndTarget(source, target, tables, params):
   source_table = source.Eval(params)
-  assert source_table in context
+  assert source_table in tables
   if target is not None:
     target_table = target.Eval(params)
-    assert target_table not in context
+    assert target_table not in tables
   else:
     target_table = source_table
   return source_table, target_table
 
-class Transform:
-  def __init__(self, source_table, target_table, expr_list):
+def RowContext(row, header):
+  context = {}
+  for i in range(len(row)):
+    context[str(i+1)] = row[i]
+  for x in header:
+    context[x] = row[header[x]]
+  return context
+
+class Transform(Command):
+  def __init__(self, line, source_table, target_table, expr_list):
+    super().__init__(line, 'TRANSFORM')
     self.source_table = source_table
     self.target_table = target_table
     self.expr_list = expr_list
 
-  def Eval(self, context, params):
+  def Eval(self, tables, params):
     source_table, target_table = SourceAndTarget(
-        self.source_table, self.target_table, context, params)
-    header, rows = context[source_table]
+        self.source_table, self.target_table, tables, params)
+    header, rows = tables[source_table]
     new_header = {}
     for expr in self.expr_list:
       expr.AppendHeader(new_header, header)
@@ -222,28 +242,24 @@ class Transform:
       new_row = []
       assert len(row) == len(header)
       # Construct the expression evaluation context
-      expr_context = {}
-      for i in range(len(row)):
-        expr_context[str(i+1)] = row[i]
-      for x in header:
-        expr_context[x] = row[header[x]]
       for expr in self.expr_list:
-        expr.AppendValues(expr_context, new_row, header, row)
+        expr.AppendValues(RowContext(row, header), new_row, header, row)
       assert len(new_row) == len(new_header)
       new_rows.append(new_row)
-    context[target_table] = (new_header, new_rows)
+    tables[target_table] = (new_header, new_rows)
 
-class Aggregate:
-  def __init__(self, source_table, target_table, group_list, expr_list):
+class Aggregate(Command):
+  def __init__(self, line, source_table, target_table, group_list, expr_list):
+    super().__init__(line, 'TRANSFORM')
     self.source_table = source_table
     self.target_table = target_table
     self.group_list = group_list
     self.expr_list = expr_list
 
-  def Eval(self, context, params):
+  def Eval(self, tables, params):
     source_table, target_table = SourceAndTarget(
-        self.source_table, self.target_table, context, params)
-    header, rows = context[source_table]
+        self.source_table, self.target_table, tables, params)
+    header, rows = tables[source_table]
 
     # Define the new header.
     new_header = {}
@@ -271,70 +287,126 @@ class Aggregate:
     new_rows = []
     for agg_key in groups:
       # Define the evaluation context.
-      # TODO: Rename "group_context" to "context"
-      group_context = {'__group_context': [{} for _ in groups[agg_key]]}
+      context = {'__group_context': [{} for _ in groups[agg_key]]}
       for column in header:
         col_num = header[column]
         if header[column] in group_keys:
-          group_context[column] = groups[agg_key][0][col_num]
-          group_context[str(col_num + 1)] = groups[agg_key][0][col_num]
+          context[column] = groups[agg_key][0][col_num]
+          context[str(col_num + 1)] = groups[agg_key][0][col_num]
         else:
           for i, row in enumerate(groups[agg_key]):
-            row_context = group_context['__group_context'][i]
+            row_context = context['__group_context'][i]
             row_context[column] = row[col_num]
             row_context[str(col_num + 1)] = row[col_num]
       # The 'debug' row value
-      debug_row = [
-          group_context[x] for x in group_context if x != '__group_context']
+      debug_row = [context[x] for x in context if x != '__group_context']
       # Calculate the expressions.
       new_row = []
       for expr in self.expr_list:
         # TODO:  
-        expr.AppendValues(group_context, new_row, header, debug_row)
+        expr.AppendValues(context, new_row, header, debug_row)
       assert len(new_row) == len(new_header)
       new_rows.append(new_row)
 
-    context[target_table] = (new_header, new_rows)
-      
-    """      
-    ### OLD STUFF
+    tables[target_table] = (new_header, new_rows)
 
-    # Aggregate
-    groups = {}
-    for row in rows:
-      agg_key = []
-      for key in group_keys:
-        agg_key.append(row[key[0]])
-      agg_key = tuple(agg_key)
-      if agg_key not in groups:
-        groups[agg_key] = []
-      groups[agg_key].append(row)
+class Join(Command):
+  def __init__(self, line, left_table, right_table, target_table,
+               left_expr, right_expr, comparator, unmatched_keys,
+               unmatched_values):
+    super().__init__(line, 'JOIN')
+    self.left_table = left_table
+    self.right_table = right_table
+    self.target_table = target_table
+    self.left_expr = left_expr
+    self.right_expr = right_expr
+    self.comparator = comparator
+    self.unmatched_keys = unmatched_keys
+    self.unmatched_values = unmatched_values
 
-    for agg_key in groups:
-      # Construct the expression context and group context.
-      expr_context = {}
-      group_context = {}
-      for column in header:
-        
+  def FindRow(self, keys, key):
+    for x in keys:
+      empty_row = [''] * len(keys[x][0])
+      break
+    if self.comparator == 'EQ':
+      if key not in keys:
+        if self.unmatched_values:
+          return empty_row
+        raise ValueError(
+            self.ErrorStr(), 'Failed to find key {} in keys'.format(key))
+      keys[key][1] = True
+      return keys[key][0]
+    elif self.comparator == 'PREFIX':
+      found_prefix = None
+      for preflen in range(len(key)+1):
+        if key[:preflen] in keys:
+          if found_prefix is not None:
+            raise ValueError(
+                self.ErrorStr(),
+                'Found two prefixes matching {}: {} and {}'.format(
+                    key, found_prefix, key[:preflen]))
+          found_prefix = key[:preflen]
+      if found_prefix is None:
+        if self.unmatched_values:
+          return empty_row
+        raise ValueError(self.ErrorStr(),
+                         'Failed to find prefix for key {}'.format(key))
+      keys[found_prefix][1] = True
+      return keys[found_prefix][0]
 
-    for agg_key in groups:
-      # Construct the expression evaluation context
-      expr_context = {}
-      rows = groups[agg_key]
-      # Add the group key columns to context.
-      for group_key in group_keys:
-        expr_context[str(group_key[0] + 1)] = rows[0][group_key[0]]
-        expr_context[group_key[1]] = rows[0][group_key[0]]
-      aggregates = {}
-      for x in header:
-        agglist = [r[header[x]] for r in rows]
-        aggregates[x] = agglist
-        aggregates[str(header[x] + 1)] = agglist
-      expr_context['__aggregates'] = aggregates
-      new_row = []
-      for expr in self.expr_list:
-        expr.AppendValues(expr_context, new_row, header, group_keys)
-      assert len(new_row) == len(new_header)
-      new_rows.append(new_row)
-    context[target_table] = (new_header, new_rows)
-    """
+  def Eval(self, tables, params):
+    left_table = self.left_table.Eval(params)
+    right_table = self.right_table.Eval(params)
+    target_table = self.target_table.Eval(params)
+    assert left_table in tables
+    left_header, left_rows = tables[left_table]
+    assert right_table in tables
+    right_header, right_rows = tables[right_table]
+    assert target_table not in tables
+    header = {}
+    for column in left_header:
+      header[column] = left_header[column]
+    for column in right_header:
+      header[column] = right_header[column] + len(left_header)
+    keys = {}
+    rows = []
+    for row in left_rows:
+      context = RowContext(row, left_header)
+      keys[self.left_expr.Eval(context)] = [row, False]
+    for row in right_rows:
+      context = RowContext(row, right_header)
+      key = self.right_expr.Eval(context)
+      rows.append(self.FindRow(keys, key) + row)
+    for row in right_rows:
+      empty_row = [''] * len(row)
+      break
+    if self.unmatched_keys in ['RAISE', 'INCLUDE']:
+      for key in keys:
+        if not keys[key][1]:
+          if self.unmatched_keys == 'INCLUDE':
+            rows.append(keys[key][0] + empty_row)
+          else:
+            raise ValueError(self.ErrorStr(),
+                             'Key {} not matched by any value'.format(key))
+    tables[target_table] = (header, rows)
+
+class Append(Command):
+  def __init__(self, line, expr_list, table):
+    super().__init__(line, 'APPEND')
+    self.expr_list = expr_list
+    self.table = table
+
+  def Eval(self, tables, params):
+    table = self.table.Eval(params)
+    if table not in tables:
+      raise ValueError(self.ErrorStr(), 'Table {} not found'.format(table))
+    row = []
+    for expr in self.expr_list:
+      row.append(expr.Eval({}))
+    if len(row) != len(tables[table][0]):
+      raise ValueError(
+          self.ErrorStr(),
+          'Provided {} values, while table {} has {} columns'.format(
+              len(row), table, len(tables[table][0])))
+    tables[table][1].append(row)
+

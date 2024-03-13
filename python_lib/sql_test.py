@@ -344,5 +344,93 @@ class TestAggregate(unittest.TestCase):
     expected = ['A;B;C', '1;4;6', '2;3;4']
     self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
 
+def Join(left_content, right_content, on_clause):
+  lines = ['LOAD left FROM "left.csv";',
+           'LOAD right FROM "right.csv";',
+           'JOIN left INTO right ON ' + on_clause + ' AS out;',
+           'DUMP out TO "out.csv";']
+  with TempFile('left.csv', left_content):
+    with TempFile('right.csv', right_content):
+      return ExecAndRead(lines, 'out.csv')
+
+class TestJoin(unittest.TestCase):
+  def test_single_row_join(self):
+    left_content = ['A;B', '1;2']
+    right_content = ['C;D', '1;3']
+    expected = ['A;B;C;D', '1;2;1;3']
+    self.assertEqual(expected, Join(left_content, right_content, 'A EQ C'))
+
+  def test_multiple_rows(self):
+    left_content = ['A;B', '1;A', '2;B']
+    right_content = ['C;D', '2;X', '1;Y']
+    expected = ['A;B;C;D', '2;B;2;X', '1;A;1;Y']
+    self.assertEqual(expected, Join(left_content, right_content, 'A EQ C'))
+
+  def test_unequal_match(self):
+    left_content = ['A;B;C', 'X;One;Match', 'Y;Zero;Matches', 'Z;Two;M.']
+    right_content = ['a;b', 'Z;1', 'Z;2', 'X;3']
+    expected = [
+        'A;B;C;a;b', 'Z;Two;M.;Z;1', 'Z;Two;M.;Z;2', 'X;One;Match;X;3']
+    self.assertEqual(expected, Join(left_content, right_content, 'A EQ a'))
+
+  def test_match_on_expression(self):
+    left_content = ['S;W', '2;Two', '3;Three', '4;Four']
+    right_content = ['x;y', '2;2', '2;0', '1;3', '4;0', '3;0', '1;1']
+    expected = ['S;W;x;y', '4;Four;2;2', '2;Two;2;0', '4;Four;1;3',
+                '4;Four;4;0', '3;Three;3;0', '2;Two;1;1']
+    on_clause = 'int(S) EQ int(x) + int(y)'
+    self.assertEqual(expected, Join(left_content, right_content, on_clause))
+
+  def test_prefix_match(self):
+    left_content = ['Prefix', 'A', 'BABA', 'ZE']
+    right_content = ['Word', 'A', 'AA', 'ZERO']
+    expected = ['Prefix;Word', 'A;A', 'A;AA', 'ZE;ZERO']
+    on_clause = 'Prefix PREFIX Word'
+    self.assertEqual(expected, Join(left_content, right_content, on_clause))
+
+  def test_without_insert_unmatched_values(self):
+    left_content = ['A', '1', '2']
+    right_content = ['B', '1', '3']
+    on_clause = 'A EQ B'
+    self.assertRaises(ValueError, Join, left_content, right_content, on_clause)
+
+  def test_insert_unmatched_values(self):
+    left_content = ['A', '1', '2']
+    right_content = ['B', '1', '3']
+    expected = ['A;B', '1;1', ';3']
+    on_clause = 'A EQ B WITH INSERT UNMATCHED VALUES'
+    self.assertEqual(expected, Join(left_content, right_content, on_clause))
+
+  def test_insert_unmatched_keys(self):
+    left_content = ['A', '1', '2']
+    right_content = ['B', '1', '1']
+    expected = ['A;B', '1;1', '1;1', '2;']
+    on_clause = 'A EQ B WITH INSERT MISSING KEYS'
+    self.assertEqual(expected, Join(left_content, right_content, on_clause))
+
+  def test_insert_unmatched_everything(self):
+    left_content = ['A', '1', '2']
+    right_content = ['B', '1', '3']
+    expected = ['A;B', '1;1', ';3', '2;']
+    on_clause = 'A EQ B WITH INSERT MISSING KEYS WITH INSERT UNMATCHED VALUES'
+    self.assertEqual(expected, Join(left_content, right_content, on_clause))
+
+  def test_raise_missing_keys(self):
+    left_content = ['A', '1', '2']
+    right_content = ['B', '1', '3']
+    on_clause = 'A EQ B WITH RAISE UNMATCHED KEYS'
+    self.assertRaises(ValueError, Join, left_content, right_content, on_clause)
+
+class TestAppend(unittest.TestCase):
+  def test_basic(self):
+    lines = ['LOAD table FROM "data";',
+             'APPEND 1, 2+2 TO table;',
+             'DUMP table TO "out.csv";']
+    content = ['A;B', '0;0', '1;1']
+    expected = content + ['1;4']
+    with TempFile('data', content):
+      actual = ExecAndRead(lines, 'out.csv')
+    self.assertEqual(expected, actual)
+  
 if __name__ == '__main__':
   unittest.main()

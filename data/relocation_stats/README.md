@@ -1,6 +1,9 @@
 Contains configs for relocation and right to vote data for 2023 Sejm
 elections.
 
+Joined data available in "summary_data_by_community.cfg" and
+"summary_data_by_district.cfg"
+
 "Relocation" means a voter applied to change his assigned place of voting
 as a one-time change prior to the vote.
 

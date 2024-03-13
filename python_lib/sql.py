@@ -226,7 +226,7 @@ def GetWordOrQuoted(tokens):
     InvalidToken(['Expected word or quoted word'], token)
   return token.value
 
-def GetLoadTable(tokens):
+def GetLoadTable(tokens, line):
   name = ForcePop(tokens, WORD).value
   ForcePop(tokens, WORD, 'FROM')
   path = GetQuotedOrVar(tokens)
@@ -236,15 +236,15 @@ def GetLoadTable(tokens):
       options[command.SEPARATOR] = ForcePop(tokens, QUOTED).value
     else:
       FailedPop(tokens, ['Invalid optional argument to LOAD TABLE'])
-  return command.Load(name, path, options)
+  return command.Load(line, name, path, options)
 
-def GetDumpTable(tokens):
+def GetDumpTable(tokens, line):
   name = GetWordOrVar(tokens)
   ForcePop(tokens, WORD, 'TO')
   path = GetQuotedOrVar(tokens)
-  return command.Dump(name, path)
+  return command.Dump(line, name, path)
 
-def GetImport(tokens):
+def GetImport(tokens, line):
   path = GetQuotedOrVar(tokens)
   options = {}
   while token := TryPop(tokens, WORD, 'WITH'):
@@ -263,7 +263,7 @@ def GetImport(tokens):
       options[command.EXTRA_TABLES].append(table_name)
     else:
       FailedPop(tokens, ['Invalid optional argument to IMPORT'])
-  return command.Import(path, options, GetCommandList)
+  return command.Import(line, path, options, GetCommandList)
 
 def GetExprList(tokens):
   expr_list = []
@@ -285,7 +285,7 @@ def GetExprList(tokens):
     if TryPop(tokens, SYMBOL, ',') is None:
       return expr_list
 
-def GetTransform(tokens):
+def GetTransform(tokens, line):
   source_table = GetWordOrVar(tokens)
   if TryPop(tokens, WORD, 'TO'):
     target_table = GetWordOrVar(tokens)
@@ -293,14 +293,9 @@ def GetTransform(tokens):
     target_table = None
   ForcePop(tokens, WORD, 'WITH')
   expr_list = GetExprList(tokens)
-  return command.Transform(source_table, target_table, expr_list)
+  return command.Transform(line, source_table, target_table, expr_list)
 
-# aggregate = AGGREGATE word_or_variable [TO word_or_variable]
-#     [ BY column_list ] WITH expr_list
-# column_list = var_or_word | var_or_word, column_list
-# The column list is the "group by" clause, if missing, all to one row.
-# The expressions can also include aggregate functions.
-def GetAggregate(tokens):
+def GetAggregate(tokens, line):
   source_table = GetWordOrVar(tokens)
   if TryPop(tokens, WORD, 'TO'):
     target_table = GetWordOrVar(tokens)
@@ -324,21 +319,68 @@ def GetAggregate(tokens):
         break
   ForcePop(tokens, WORD, 'WITH')
   expr_list = GetExprList(tokens)
-  return command.Aggregate(source_table, target_table, group_list, expr_list)
+  return command.Aggregate(
+      line, source_table, target_table, group_list, expr_list)
       
+def GetJoin(tokens, line):
+  left_table = GetWordOrVar(tokens)
+  ForcePop(tokens, WORD, 'INTO')
+  right_table = GetWordOrVar(tokens)
+  ForcePop(tokens, WORD, 'ON')
+  left_expr = GetExpression(tokens)
+  comparator = None
+  if TryPop(tokens, WORD, 'EQ'):
+    comparator = 'EQ'
+  elif TryPop(tokens, WORD, 'PREFIX'):
+    comparator = 'PREFIX'
+  else:
+    FailedPop(tokens, ['Invalid comparator'])
+  right_expr = GetExpression(tokens)
+  unmatched_keys = 'IGNORE'
+  unmatched_values = False
+  while TryPop(tokens, WORD, 'WITH'):
+    if TryPop(tokens, WORD, 'INSERT'):
+      if TryPop(tokens, WORD, 'UNMATCHED'):
+        ForcePop(tokens, WORD, 'VALUES')
+        unmatched_values = True
+      elif TryPop(tokens, WORD, 'MISSING'):
+        ForcePop(tokens, WORD, 'KEYS')
+        unmatched_keys = 'INCLUDE'
+      else:
+        FailedPop(tokens, ['Option on join, WITH INSERT...'])
+    elif TryPop(tokens, WORD, 'RAISE'):
+      ForcePop(tokens, WORD, 'UNMATCHED')
+      ForcePop(tokens, WORD, 'KEYS')
+      unmatched_keys = 'RAISE'
+  ForcePop(tokens, WORD, 'AS')
+  target_table = GetWordOrVar(tokens)
+  return command.Join(line, left_table, right_table, target_table,
+                      left_expr, right_expr, comparator, unmatched_keys,
+                      unmatched_values)
+
+def GetAppend(tokens, line):
+  expr_list = [GetExpression(tokens)]
+  while TryPop(tokens, SYMBOL, ','):
+    expr_list.append(GetExpression(tokens))
+  ForcePop(tokens, WORD, 'TO')
+  table = GetWordOrVar(tokens)
+  return command.Append(line, expr_list, table)
 
 def GetBody(tokens):
-  if TryPop(tokens, WORD, 'LOAD'):
-    return GetLoadTable(tokens)
-  elif TryPop(tokens, WORD, 'DUMP'):
-    return GetDumpTable(tokens)
-  elif TryPop(tokens, WORD, 'IMPORT'):
-    return GetImport(tokens)
-  elif TryPop(tokens, WORD, 'TRANSFORM'):
-    return GetTransform(tokens)
-  elif TryPop(tokens, WORD, 'AGGREGATE'):
-    return GetAggregate(tokens)
-  # TODO: Joins go here.
+  if t := TryPop(tokens, WORD, 'LOAD'):
+    return GetLoadTable(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'DUMP'):
+    return GetDumpTable(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'IMPORT'):
+    return GetImport(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'TRANSFORM'):
+    return GetTransform(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'AGGREGATE'):
+    return GetAggregate(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'JOIN'):
+    return GetJoin(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'APPEND'):
+    return GetAppend(tokens, t.line)
   else:
     FailedPop(tokens, ['Invalid command'])
 
@@ -387,11 +429,34 @@ def GetCommand(tokens):
 # The column list is the "group by" clause.
 # The expressions can also include aggregate functions.
 
+####### Joins
+# join = JOIN word_or_var INTO word_or_var ON expression comparator expression 
+#            [WITH INSERT MISSING KEYS]
+#            [WITH INSERT UNMATCHED VALUES]
+#            [WITH RAISE UNMATCHED KEYS]
+#            AS word_or_var
+# comparator = EQ | PREFIX
+#
+# The assumption here is that every item in the right table has exactly
+# one match (equality or prefix) in the left table. Or, in other words,
+# the left table is the lookup source, and the right table does the lookups.
+# WITH INSERT MISSING KEYS means that any key that doesn't get matched to some
+#  value will be inserted, with empty strings as the values for all columns
+#  from the right table.
+# WITH INSERT UNMATCHED VALUES means that instead of throwing an exception,
+#  we will insert a row with empty strings as values for columns from the left
+#  table.
+# WITH RAISE UNMATCHED KEYS means that an exception will be raised if any key
+#  is not matched at least ones.
+
+##### Append row
+# append = APPEND expression_list TO word_or_var
+# expression_list = expression | expression, expression_list
+#
+# Appends a row at the end of the table. Expressions should be constants.
+# Length of expression list must match length of row in the table.
+
 # TODO: pivoting the table.
-# TODO join_tables = ...
-#   (TODO: This, I think, is simpler, take two tables, create a table that
-#    has the columns of both, joined by key, options requiring full/left/
-#    right joins)
 
 def GetCommandList(lines):
   tokens = tokenizer.tokenize(lines)
