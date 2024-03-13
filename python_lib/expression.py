@@ -168,11 +168,15 @@ class Variable(Expression):
     self.name = name
 
   def Eval(self, context):
-    if self.name not in context:
+    if '__dynamic' in context and self.name in context['__dynamic']:
+      name = context['__dynamic'][self.name]
+    else:
+      name = self.name
+    if name not in context:
       raise ValueError(
-          self.ErrorStr(), 'Name not present in context: {}'.format(
-              context.keys()))
-    return context[self.name]
+          self.ErrorStr(), 'Name {} not present in context: {}'.format(
+              name, context.keys()))
+    return context[name]
 
 class Constant(Expression):
   def __init__(self, val, token):

@@ -179,8 +179,10 @@ class RangeExpression:
       new_header[old_header_rev[col]] = len(new_header)
 
   def AppendValues(self, context, row, header, input_row):
+    if '__dynamic' not in context:
+      context['__dynamic'] = {}
     for x in range(self.range_beg, self.range_end):
-      context['?'] = context[str(x + 1)]
+      context['__dynamic']['?'] = str(x + 1)
       try:
         row.append(self.expr.Eval(context))
       except Exception as e:
@@ -190,7 +192,7 @@ class RangeExpression:
         msg = 'Failure evaluating {} (column {} in range {}-{}) for row {}'
         raise ValueError(msg.format(header_rev[x], x+1, self.range_beg+1,
                                     self.range_end+1, input_row)) from e
-    del context['?']
+    del context['__dynamic']['?']
 
 def SourceAndTarget(source, target, context, params):
   source_table = source.Eval(params)

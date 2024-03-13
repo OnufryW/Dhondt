@@ -337,5 +337,12 @@ class TestAggregate(unittest.TestCase):
     expected = ['A;sum_of_quotients', '1;4', '2;1']
     self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
 
+  def test_range_expression(self):
+    content = ['A;B;C', '1;2;3', '1;2;3', '2;3;4']
+    groups = 'A'
+    exprs = 'A AS A, sum($?) FOR 2:4'
+    expected = ['A;B;C', '1;4;6', '2;3;4']
+    self.assertEqual(expected, SimpleAggregate(content, groups, exprs))
+
 if __name__ == '__main__':
   unittest.main()
