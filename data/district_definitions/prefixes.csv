@@ -1,6 +1,9 @@
 # The definitions of electoral districts as of the 2023 elections. Based on
 # Wikipedia data on TERC codes, and Wikipedia data on electoral district
 # definitions, retrieved February 26th, 2024.
+# Also contains modifications that make it work for 2019 and 2015 elections
+# - adding the different ship definitions (Gdynia and Gdańsk ships for 2015
+# as 229801 and 229901, respectively, and Warsaw ships for 2019 as 149801)
 TERC;Electoral District ID;What this covers
 0261;1;Jelenia Góra
 0262;1;Legnica
@@ -168,6 +171,7 @@ TERC;Electoral District ID;What this covers
 1432;20;warszawski zachodni
 1434;20;wołomiński
 1465;19;Warszawa
+149801;19;statki Warszawa
 1499;19;zagranica
 16;21;województwo opolskie
 1801;22;bieszczadzki
@@ -205,6 +209,7 @@ TERC;Electoral District ID;What this covers
 2213;25;starogardzki
 2216;25;sztumski
 2214;25;tczewski
+229901;25;statki Gdańsk
 2201;26;bytowski
 2202;26;chojnicki
 2203;26;człuchowski
@@ -216,6 +221,7 @@ TERC;Electoral District ID;What this covers
 2263;26;Słupsk
 2215;26;wejcherowski
 2262;26;Gdynia
+229801;26;statki Gdynia
 2402;27;bielski
 2403;27;cieszyński
 2410;27;pszczyński

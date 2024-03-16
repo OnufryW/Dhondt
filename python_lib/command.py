@@ -49,6 +49,27 @@ class Load(Command):
     # Defaults:
     if SEPARATOR not in options:
       options[SEPARATOR] = ';'
+    if 'IGNORE QUOTED SEPARATOR' not in options:
+      options['IGNORE QUOTED SEPARATOR'] = False
+
+  def SplitQuotedLine(self, line, separator):
+    res = []
+    curquote = None
+    curline = []
+    for c in line:
+      if c in ['\'', '"']:
+        curline.append(c)
+        if curquote == None:
+          curquote = c
+        elif curquote == c:
+          curquote = None
+      elif c == separator and curquote is None:
+        res.append(''.join(curline).strip())
+        curline = []
+      else:
+        curline.append(c)
+    res.append(''.join(curline).strip())
+    return res
 
   # Headered SSV file, rectangle-shaped.
   # TODO: add option for separator, possibly also header presense, and
@@ -56,19 +77,27 @@ class Load(Command):
   def ReadLines(self, lines):
     header_row_parsed = False
     rows = []
-    for row in lines:
+    for row_number, row in enumerate(lines):
       if not row or row[0] == '#':
         continue
-      r = [v.strip() for v in row.split(self.options[SEPARATOR])]
+      if self.options['IGNORE QUOTED SEPARATOR']:
+        r = self.SplitQuotedLine(row, self.options[SEPARATOR])
+      else:
+        r = [v.strip() for v in row.split(self.options[SEPARATOR])]
       if not header_row_parsed:
         header = {}
         for i, v in enumerate(r):
           header[v] = i
         header_row_parsed = True
         continue
-      assert len(r) == len(header)
+      if len(r) != len(header):
+        raise ValueError(
+            'FAILED {}: Line {} has length {}, header has length {}'.format(
+                self.ErrorStr(), row_number, len(r), len(header)), header,
+                r)
       rows.append(r)
-    assert header is not None
+    if header is None:
+      raise ValueError('FAILED {}: No lines in file'.format(self.ErrorStr()))
     return (header, rows)
 
   def Eval(self, tables, params):
@@ -130,7 +159,12 @@ class Import(Command):
     path = self.path.Eval(params)
     # Step one: Parse the relevant file.
     with open(path, 'r') as config_file:
-      child_command = self.parser(config_file.readlines())
+      try:
+        child_command = self.parser(config_file.readlines())
+      except Exception as e:
+        raise ValueError(
+            'FAILED {}: Failure parsing imported file {}'.format(
+                self.ErrorStr(), path)) from e 
     # Step two: prepare the new parameters for the execution.
     child_params = {}
     # TODO: consider an option where we're explicitly not passing params in
@@ -149,7 +183,10 @@ class Import(Command):
       assert table_name in tables
       child_tables[table_name] = tables[table_name]
     # Step five: actually execute child
-    child_command.Eval(child_tables, child_params)
+    try:
+      child_command.Eval(child_tables, child_params)
+    except ValueError as e:
+      raise ValueError('Failure in imported file ' + path) from e
     # Step six: roll back the directory shift
     os.chdir(oldpath)
     # Step seven: copy results of child execution into parent tables
@@ -324,7 +361,7 @@ class Join(Command):
     self.unmatched_keys = unmatched_keys
     self.unmatched_values = unmatched_values
 
-  def FindRow(self, keys, key):
+  def FindRow(self, keys, key, left_table):
     for x in keys:
       empty_row = [''] * len(keys[x][0])
       break
@@ -333,7 +370,8 @@ class Join(Command):
         if self.unmatched_values:
           return empty_row
         raise ValueError(
-            self.ErrorStr(), 'Failed to find key {} in keys'.format(key))
+            self.ErrorStr(), 'Failed to find key {} in table {}'.format(
+                key, left_table))
       keys[key][1] = True
       return keys[key][0]
     elif self.comparator == 'PREFIX':
@@ -376,7 +414,7 @@ class Join(Command):
     for row in right_rows:
       context = RowContext(row, right_header)
       key = self.right_expr.Eval(context)
-      rows.append(self.FindRow(keys, key) + row)
+      rows.append(self.FindRow(keys, key, left_table) + row)
     for row in right_rows:
       empty_row = [''] * len(row)
       break
@@ -386,8 +424,10 @@ class Join(Command):
           if self.unmatched_keys == 'INCLUDE':
             rows.append(keys[key][0] + empty_row)
           else:
-            raise ValueError(self.ErrorStr(),
-                             'Key {} not matched by any value'.format(key))
+            raise ValueError(
+                self.ErrorStr(),
+                'Key {} from {} not matched by any value'.format(
+                    key, left_table))
     tables[target_table] = (header, rows)
 
 class Append(Command):

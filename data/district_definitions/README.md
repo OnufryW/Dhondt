@@ -7,4 +7,4 @@ TERC code beginning with that prefix should be assigned, and the third
 column is a description of what this row describes, mainly for debugging
 purposes.
 
-The TERC codes are always assumed to be seven-digit, zero-left-padded.
+The TERC codes are always assumed to be six-digit, zero-left-padded.

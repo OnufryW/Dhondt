@@ -1,8 +1,0 @@
-# Config for transforming the 2023 by-district results into the 2023 format.
-# The schema is, of course, valid, we just use the transform to clean up the
-# data a bit.
-# See data/transform_csv_file.py for the format of the config.
-# See the README.md file for the schema transformation.
-
-...1;$Q?;$EQ?
-

@@ -234,6 +234,10 @@ def GetLoadTable(tokens, line):
   while token := TryPop(tokens, WORD, 'WITH'):
     if token := TryPop(tokens, WORD, 'SEPARATOR'):
       options[command.SEPARATOR] = ForcePop(tokens, QUOTED).value
+    elif token := TryPop(tokens, WORD, 'IGNORE'):
+      ForcePop(tokens, WORD, 'QUOTED')
+      ForcePop(tokens, WORD, 'SEPARATOR')
+      options['IGNORE QUOTED SEPARATOR'] = True
     else:
       FailedPop(tokens, ['Invalid optional argument to LOAD TABLE'])
   return command.Load(line, name, path, options)
@@ -394,8 +398,9 @@ def GetCommand(tokens):
 # body = load_table | dump_table | transform_table | join_tables
 
 ####### File operations
-# load_table = LOAD word FROM quoted_or_var [WITH SEPARATOR word]
-#   (TODO: loading options: with/without header? SSV format?)
+# load_table = LOAD word FROM quoted_or_var 
+#    [WITH SEPARATOR word]
+#    [WITH IGNORE QUOTED SEPARATOR]
 # dump_table = DUMP word TO quoted_or_var
 #   (TODO: again, dumping options, default to SSV? Something else?)
 #   (Allow 'quoted_or_var' to be STDOUT)

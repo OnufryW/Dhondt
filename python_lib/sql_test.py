@@ -144,6 +144,15 @@ class TestCommandList(unittest.TestCase):
     with TempFile('temp.csv', content):
       self.assertEqual(expected, ExecAndRead(command, 'output.ssv'))
 
+  def test_ignore_quoted_separator(self):
+    content = ['ID$NAME$VALUE', '1$"$"$"\'\'$$"""', '2$$', '3$\'"$\'$"$"']
+    expected = ['ID;NAME;VALUE', '1;"$";"\'\'$$"""', '2;;', '3;\'"$\';"$"']
+    command = [
+        'LOAD x FROM "x.csv" WITH SEPARATOR "$" WITH IGNORE QUOTED SEPARATOR;',
+        'DUMP x TO "y.csv";']
+    with TempFile('x.csv', content):
+      self.assertEqual(expected, ExecAndRead(command, 'y.csv'))
+
   def test_variable_load_path_and_dump_table_and_path(self):
     content = SomeContent()
     command = ['LOAD table FROM $infile;',
