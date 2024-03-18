@@ -1,3 +1,4 @@
+import heapq
 # The expression class, which provides the (implicit) Expression class,
 # which has a single Eval(context) function.
 
@@ -161,6 +162,77 @@ class RangeExpr(Expression):
         raise ValueError(self.ErrorStr(), 'Accumulating', arg, 'to', val,
                          'at pos', col) from e
     return val
+
+# Note: This isn't super-efficient, as we do the whole d'Hondt calculation
+# for each party over and over again; instead of doing it once. However,
+# I expect O(10) parties and O(40) districts, so it should be fine.
+class DhondtExpr(Expression):
+  def __init__(self, seats, votes, beg, end, token):
+    super().__init__(token, 'dhondt')
+    self.seats = seats
+    self.votes = votes
+    self.beg = beg
+    self.end = end
+
+  def Calc(self, my_votes, index, other_votes, seats):
+    # 'index' should be the my index amongst the other votes, and should
+    # be a fractional number.
+    division_level = {index: (my_votes, 1)}
+    candidates = []
+    heapq.heappush(candidates, (-my_votes, index))
+    for i, v in enumerate(other_votes):
+      division_level[i] = (v, 1)
+      heapq.heappush(candidates, (-v, i))
+    res = 0
+    for seat in range(seats):
+      _, ind = heapq.heappop(candidates)
+      votes, div = division_level[ind]
+      division_level[ind] = (votes, div+1)
+      heapq.heappush(candidates, (-votes / (div+1), ind))
+      if ind == index:
+        res += 1
+    return res
+
+  def Eval(self, context):
+    end = self.end
+    if end < 0:
+      end = len(context) // 2 + 1
+    votes = []
+    for col in range(self.beg, end):
+      argpos = str(col)
+      if argpos not in context:
+        raise ValueError(self.ErrorStr(),
+            '{} not present in context: {}'.format(argpos, context))
+      votes.append(context[argpos])
+    seats = self.seats.Eval(context)
+    my_votes = self.votes.Eval(context)
+    # Need to remove "my_votes" from votes. There are two ways to do this
+    # - either my votes are unique in votes, or they're coming from $?, in
+    # which case I assume they're $?.
+    positions = []
+    for i, v in enumerate(votes):
+      if v == my_votes:
+        positions.append(i)
+    if len(positions) == 0:
+      raise ValueError(self.ErrorStr(),
+          'My votes {} are not in all the votes numbers {}'.format(
+              my_votes, votes))
+    if len(positions) == 1:
+      votes.pop(positions[0])
+      return self.Calc(my_votes, positions[0] - 0.5, votes, seats)
+    if '__dynamic' not in context or '?' not in context['__dynamic']:
+      raise ValueError(self.ErrorStr(),
+          'Cannot disambiguate which vote is mine',
+          '{} votes appear on positions {} of votes array {}'.format(
+              my_votes, positions, votes))
+    var = int(context['__dynamic']['?'])
+    if var - self.beg not in positions:
+      raise ValueError(self.ErrorStr(),
+          'Cannot disambiguate which vote is mine',
+          '{} votes appear on positions {} of votes array {}'.format(
+              my_votes, positions, votes))
+    votes.pop(var - self.beg)
+    return self.Calc(my_votes, var - self.beg - 0.5, votes, seats)
 
 class Variable(Expression):
   def __init__(self, name, token):

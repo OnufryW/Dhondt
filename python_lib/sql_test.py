@@ -97,6 +97,21 @@ class TestExpression(unittest.TestCase):
     self.assertEqual(9, evaluate('sum(arg)',
                                  {'__group_context': [{'arg': 3}, {'arg': 6}]}))
 
+  def dhondt_helper(self, seats, votes, expected):
+    context = {}
+    for i, v in enumerate(votes):
+      context[str(i+1)] = v
+    context['__dynamic'] = {}
+    for i, v in enumerate(votes):
+      context['__dynamic']['?'] = str(i+1)
+      expr = 'dhondt({}, {}, 1:{})'.format(seats, v, len(votes) + 1)
+      self.assertEqual(expected[i], evaluate(expr, context))
+
+  def test_dhondt(self):
+    self.dhondt_helper(4, [20, 4], [4, 0])
+    self.dhondt_helper(4, [20, 7], [3, 1])
+    self.dhondt_helper(3, [20, 16, 10], [2, 1, 0])
+
 class TempFile(object):
   def __init__(self, path, lines):
     self.path = path
@@ -280,6 +295,16 @@ class TestTransform(unittest.TestCase):
     command = '$? FOR 2:4'
     expected = ['ColB;ColC', '2;3']
     self.assertEqual(expected, Transform(content, command))
+
+  def test_range_dhondt(self):
+    content = ['ID;Seats;B;C;D', 'X;5;10;7;3', 'Y;3;13;5;12']
+    command = ['LOAD t FROM "in";',
+               'TRANSFORM t WITH ID AS ID, int($?) FOR 2:;',
+               'TRANSFORM t WITH ID AS ID, dhondt(Seats, $?, 3:) FOR 3:;'
+               'DUMP t TO "out";']
+    expected = ['ID;B;C;D', 'X;3;2;0', 'Y;2;0;1']
+    with TempFile('in', content):
+      self.assertEqual(expected, ExecAndRead(command, 'out'))
 
 def Aggregate(content, aggregate):
   command = [

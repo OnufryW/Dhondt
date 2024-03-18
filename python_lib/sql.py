@@ -33,7 +33,10 @@ AGGREGATE_FUNCTIONS = {
   'max': (None, lambda a, b: b if a is None else max(a,b)),
   'and': (0, lambda a, b: a + b),
 }
-FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys()) + list(RANGE_FUNCTIONS.keys()) + list(AGGREGATE_FUNCTIONS.keys())
+SPECIAL_FUNCTIONS = {
+  'dhondt',
+}
+FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys()) + list(RANGE_FUNCTIONS.keys()) + list(AGGREGATE_FUNCTIONS.keys()) + list(SPECIAL_FUNCTIONS)
 KEYWORDS = FUNCTION_NAMES + [
   'LOAD', 'DUMP', 'FROM', 'TO', 'SEPARATOR', 'WITH', 'TRANSFORM', 'AS',
   'PARAM', 'PREFIX', 'IMPORT']
@@ -82,6 +85,14 @@ def GetNumber(token):
   else:
     return expression.Constant(float(token.value), token)
 
+def GetRange(tokens):
+  beg = TryPop(tokens, NUMBER)
+  beg = int(beg.value) if beg else 1
+  ForcePop(tokens, SYMBOL, ':')
+  end = TryPop(tokens, NUMBER)
+  end = int(end.value) if end else -1
+  return beg, end
+
 def GetFactor(tokens):
   token = ForcePop(tokens)
   if token.typ == NUMBER:
@@ -114,15 +125,18 @@ def GetFactor(tokens):
             arg1, arg2, arg3, TERNARY_FUNCTIONS[token.value], token,
             token.value)
       elif token.value in RANGE_FUNCTIONS:
-        beg = TryPop(tokens, NUMBER)
-        beg = beg.value if beg else 1
-        ForcePop(tokens, SYMBOL, ':')
-        end = TryPop(tokens, NUMBER)
-        end = end.value if end else -1
+        beg, end = GetRange(tokens)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.RangeExpr(int(beg), int(end),
-                                    RANGE_FUNCTIONS[token.value],
+        return expression.RangeExpr(beg, end, RANGE_FUNCTIONS[token.value],
                                     token, token.value)
+      elif token.value == 'dhondt':
+        seats = GetExpression(tokens)
+        ForcePop(tokens, SYMBOL, ',')
+        votes = GetExpression(tokens)
+        ForcePop(tokens, SYMBOL, ',')
+        beg, end = GetRange(tokens)
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.DhondtExpr(seats, votes, beg, end, token)
       elif token.value in AGGREGATE_FUNCTIONS:
         arg = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ')')
