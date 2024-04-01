@@ -148,7 +148,7 @@ class RangeExpr(Expression):
     val = self.acc[0]
     end = self.end
     if end < 0:
-      end = len(context) // 2 + 1
+      end = context['$$last']
     for col in range(self.beg, end):
       argpos = str(col)
       if argpos not in context:
@@ -196,7 +196,7 @@ class DhondtExpr(Expression):
   def Eval(self, context):
     end = self.end
     if end < 0:
-      end = len(context) // 2 + 1
+      end = context['$$last']
     votes = []
     for col in range(self.beg, end):
       argpos = str(col)
@@ -234,21 +234,42 @@ class DhondtExpr(Expression):
     votes.pop(var - self.beg)
     return self.Calc(my_votes, var - self.beg - 0.5, votes, seats)
 
+def GetValueFromContext(name, context):
+  if '__dynamic' in context and name in context['__dynamic']:
+    name = context['__dynamic'][name]
+  if name not in context:
+    raise ValueError('Name {} not present in context: {}'.format(
+        name, context.keys()))
+  return context[name]
+
 class Variable(Expression):
   def __init__(self, name, token):
     super().__init__(token, 'variable ' + name)
     self.name = name
 
   def Eval(self, context):
-    if '__dynamic' in context and self.name in context['__dynamic']:
-      name = context['__dynamic'][self.name]
-    else:
-      name = self.name
-    if name not in context:
+    try:
+      return GetValueFromContext(self.name, context)
+    except Exception as e:
+      raise ValueError(self.ErrorStr()) from e
+
+class ReferVariable(Expression):
+  def __init__(self, name_var, token):
+    super().__init__(token, 'reference variable')
+    self.name_var = name_var
+
+  def Eval(self, context):
+    try:
+      name = self.name_var.Eval(context)
+    except Exception as e:
       raise ValueError(
-          self.ErrorStr(), 'Name {} not present in context: {}'.format(
-              name, context.keys()))
-    return context[name]
+          self.ErrorStr(), 'Failed to evaluate column name') from e
+    try:
+      return GetValueFromContext(name, context)
+    except Exception as e:
+      raise ValueError(self.ErrorStr(),
+                       'Evaluated value {} missing from context {}'.format(
+                           name, context.keys()))
 
 class Constant(Expression):
   def __init__(self, val, token):

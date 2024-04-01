@@ -213,10 +213,11 @@ class SingleExpression:
           self.columnname, len(row) + 1, input_row)) from e
 
 class RangeExpression:
-  def __init__(self, expr, range_beg, range_end):
+  def __init__(self, expr, range_beg, range_end, header_expr):
     self.expr = expr
     self.range_beg = range_beg - 1
     self.range_end = range_end - 1
+    self.header_expr = header_expr
 
   def AppendHeader(self, new_header, old_header):
     old_header_rev = {}
@@ -224,19 +225,25 @@ class RangeExpression:
       old_header_rev[old_header[x]] = x
     self.range_end = self.range_end if self.range_end >= 0 else len(old_header)
     for col in range(self.range_beg, self.range_end):
-      new_header[old_header_rev[col]] = len(new_header)
+      col_header = old_header_rev[col]
+      if self.header_expr is not None:
+        context = {'?header': col_header}
+        col_header = self.header_expr.Eval(context)
+      new_header[col_header] = len(new_header)
 
   def AppendValues(self, context, row, header, input_row):
     if '__dynamic' not in context:
       context['__dynamic'] = {}
+    header_rev = {}
+    for name in header:
+      header_rev[header[name]] = name
     for x in range(self.range_beg, self.range_end):
       context['__dynamic']['?'] = str(x + 1)
+      context['?header'] = header_rev[x]
+      context['$$last'] = len(header) + 1
       try:
         row.append(self.expr.Eval(context))
       except Exception as e:
-        header_rev = {}
-        for name in header:
-          header_rev[header[name]] = name
         msg = 'Failure evaluating {} (column {} in range {}-{}) for row {}'
         raise ValueError(msg.format(header_rev[x], x+1, self.range_beg+1,
                                     self.range_end+1, input_row)) from e
@@ -450,3 +457,64 @@ class Append(Command):
               len(row), table, len(tables[table][0])))
     tables[table][1].append(row)
 
+class Pivot(Command):
+  def __init__(self, line, source, target, headers_from, headers_to):
+    super().__init__(line, 'PIVOT')
+    self.source = source
+    self.target = target
+    self.headers_from = headers_from
+    self.headers_to = headers_to
+
+  def Eval(self, tables, params):
+    source, target = SourceAndTarget(
+        self.source, self.target, tables, params)
+    skipped_source_col = None
+    header = {}
+    rows = []
+    # Prepare the new header lambda, and the skipped row.
+    if self.headers_from:
+      headers_from = self.headers_from.Eval(params)
+      if headers_from not in tables[source][0]:
+        raise ValueError(
+          self.ErrorStr(),
+          'Source table {} does not have requested header column {}'.format(
+              source, headers_from))
+      header_column_index = tables[source][0][headers_from]
+      skipped_source_col = header_column_index
+      header_for_row = lambda i, row: row[header_column_index]
+    else:
+      header_for_row = lambda i, row: 'col_' + str(i+1)
+    # Prepare empty new rows (one per old column, potentially minus headers)
+    for _ in tables[source][0]:
+      rows.append([])
+    if skipped_source_col is not None:
+      rows.pop()
+    def target_row(source_col):
+      if skipped_source_col is None:
+        return source_col
+      if source_col < skipped_source_col:
+        return source_col
+      elif source_col == skipped_source_col:
+        return None
+      else:
+        return source_col - 1
+    # Construct the headers column
+    if self.headers_to:
+      headers_to = self.headers_to.Eval(params)
+      header[headers_to] = 0
+      for h in tables[source][0]:
+        if target_row(tables[source][0][h]) is not None:
+          rows[target_row(tables[source][0][h])].append(h)
+    # Construct the headers and the rest of the rows.
+    for i, row in enumerate(tables[source][1]):
+      h = header_for_row(i, row)
+      if h in header.keys():
+        raise ValueError(
+            'Header column {} contains duplicate key {} in row {}'.format(
+                headers_from, h, i))
+      header[h] = i if self.headers_to is None else i + 1
+      for j, val in enumerate(row):
+        if target_row(j) is not None:
+          rows[target_row(j)].append(val)
+    tables[target] = (header, rows)
+   

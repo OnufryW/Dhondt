@@ -39,9 +39,12 @@ def consumeVariable(s, tokenList, line, curpos):
 
 def consumeWildcard(s, tokenList, line, curpos):
   if s.startswith('$?'):
-    tokenList.append(Token('?', VARIABLE, line, curpos, curpos+2))
-    s = s[2:]
-    return curpos + 2, s
+    pos = 2
+    while pos < len(s) and (s[pos].isalnum() or s[pos] == '_'):
+      pos += 1
+    tokenList.append(Token(s[1:pos], VARIABLE, line, curpos, curpos+pos))
+    s = s[pos:]
+    return curpos + pos, s
   return curpos, s
 
 def consumeSpace(s, tokenList, line, curpos):
@@ -76,9 +79,13 @@ def tokenize(lines):
       curlen = len(s)
       curbeg, s = consumeWord(s, res, l, curbeg)
       curbeg, s = consumeQuotedWord(s, res, l, curbeg)
-    # Note: ConsumeWildcard has to go just before ConsumeVariable
+      # The various variable. If we consume any of the "weird" variables,
+      # don't consume the "standard" variable, as it might be weird too.
+      oldcurbeg = curbeg
       curbeg, s = consumeWildcard(s, res, l, curbeg)
-      curbeg, s = consumeVariable(s, res, l, curbeg)
+      if curbeg == oldcurbeg:
+        curbeg, s = consumeVariable(s, res, l, curbeg)
+
       curbeg, s = consumeSpace(s, res, l, curbeg)
       curbeg, s = consumeNumber(s, res, l, curbeg)
       curbeg, s = consumeSymbol(s, res, l, curbeg)

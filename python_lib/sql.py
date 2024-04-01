@@ -148,6 +148,11 @@ def GetFactor(tokens):
     else:
       return expression.Variable(token.value, token)
   elif token.typ == VARIABLE:
+    if token.value == '':
+      ForcePop(tokens, SYMBOL, '(')
+      arg = GetExpression(tokens)
+      ForcePop(tokens, SYMBOL, ')')
+      return expression.ReferVariable(arg, token)
     return expression.Variable(token.value, token)
   elif token.typ == SYMBOL:
     if token.value == '(':
@@ -299,7 +304,11 @@ def GetExprList(tokens):
       ForcePop(tokens, SYMBOL, ':')
       range_end_token = TryPop(tokens, NUMBER)
       range_end = int(range_end_token.value) if range_end_token else -1
-      expr_list.append(command.RangeExpression(expr, range_begin, range_end))
+      header_expr = None
+      if TryPop(tokens, WORD, 'AS'):
+        header_expr = GetExpression(tokens)
+      expr_list.append(command.RangeExpression(
+          expr, range_begin, range_end, header_expr))
     if TryPop(tokens, SYMBOL, ',') is None:
       return expr_list
 
@@ -384,6 +393,22 @@ def GetAppend(tokens, line):
   table = GetWordOrVar(tokens)
   return command.Append(line, expr_list, table)
 
+def GetPivot(tokens, line):
+  table = GetWordOrVar(tokens)
+  target = None
+  headers_from = None
+  headers_to = None
+  if TryPop(tokens, WORD, 'TO'):
+    target = GetWordOrVar(tokens)
+  while TryPop(tokens, WORD, 'WITH'):
+    if TryPop(tokens, WORD, 'NEW_HEADERS_FROM'):
+      headers_from = GetWordOrVar(tokens)
+    elif TryPop(tokens, WORD, 'OLD_HEADERS_TO'):
+      headers_to = GetWordOrVar(tokens)
+    else:
+      FailedPop(tokens, ['Option for pivot'])
+  return command.Pivot(line, table, target, headers_from, headers_to)
+
 def GetBody(tokens):
   if t := TryPop(tokens, WORD, 'LOAD'):
     return GetLoadTable(tokens, t.line)
@@ -399,6 +424,8 @@ def GetBody(tokens):
     return GetJoin(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'APPEND'):
     return GetAppend(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'PIVOT'):
+    return GetPivot(tokens, t.line)
   else:
     FailedPop(tokens, ['Invalid command'])
 
@@ -475,7 +502,20 @@ def GetCommand(tokens):
 # Appends a row at the end of the table. Expressions should be constants.
 # Length of expression list must match length of row in the table.
 
-# TODO: pivoting the table.
+##### Pivot the table.
+# pivot = PIVOT word_or_variable
+#    [TO word_or_variable]
+#    [WITH NEW_HEADERS_FROM word_or_variable]
+#    [WITH OLD_HEADERS_TO word_or_variable]
+#
+# Transforms the table by making rows into columns, and columns into rows.
+# The first option tells us which column is to be used as headers. The
+# entries in this column have to be unique. If not chosen; the headers will
+# just be 1, 2, 3...
+# The second option tells us what should the name of the column containing
+# the headers of the old table be (if unselected, no such column is created)
+# The "TO" option gives the name of the output table. If not chosen, the
+# pivot output overwrites the source table.
 
 def GetCommandList(lines):
   tokens = tokenizer.tokenize(lines)

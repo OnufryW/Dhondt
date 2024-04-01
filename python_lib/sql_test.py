@@ -38,6 +38,14 @@ class TestTokenize(unittest.TestCase):
 
   def test_series_of_quotes(self):
     self.assertEqual(['', '', ''], tokenValues('""""\'\''))
+    
+  def test_variable(self):
+    self.assertEqual(['Krowa'], tokenValues('$Krowa'))
+    self.assertEqual(['?'], tokenValues('$?'))
+    self.assertEqual(['?header'], tokenValues('$?header'))
+    self.assertEqual(['?header', 'header', '?'],
+        tokenValues('$?header$header$?'))
+    self.assertEqual(['', '(', '?', ')',], tokenValues('$($?)'))
 
   def test_token_types(self):
     self.assertEqual(['A$word', '=$symbol', '4$number'],
@@ -306,6 +314,30 @@ class TestTransform(unittest.TestCase):
     with TempFile('in', content):
       self.assertEqual(expected, ExecAndRead(command, 'out'))
 
+  def test_range_expression_custom_header(self):
+    content = ['ColA;ColB;ColC', '1;2;3', '4;5;6']
+    command = '$? FOR 2: AS $?header + "_new"'
+    expected = ['ColB_new;ColC_new', '2;3', '5;6']
+    self.assertEqual(expected, Transform(content, command))
+
+  def test_refer_variable(self):
+    content = ['A;B;C', '1;2;A', '3;4;B']
+    command = '$(C) AS selected'
+    expected = ['selected', '1', '4']
+    self.assertEqual(expected, Transform(content, command))
+
+  def test_refer_variable_range(self):
+    content = ['A;B;C;D', '1;2;A;A', '3;4;B;A']
+    command = '$($?) FOR 3:'
+    expected = ['C;D', '1;1', '4;3']
+    self.assertEqual(expected, Transform(content, command))
+
+  def test_header_access(self):
+    content = ['A;B', 'x;y', 'z;v']
+    command = '$?header + $? FOR 1:'
+    expected = ['A;B', 'Ax;By', 'Az;Bv']
+    self.assertEqual(expected, Transform(content, command))
+
 def Aggregate(content, aggregate):
   command = [
       'LOAD table FROM "in";',
@@ -455,6 +487,13 @@ class TestJoin(unittest.TestCase):
     on_clause = 'A EQ B WITH RAISE UNMATCHED KEYS'
     self.assertRaises(ValueError, Join, left_content, right_content, on_clause)
 
+  def test_join_single_row(self):
+    left_content = ['A;B', '1;2']
+    right_content = ['C;D', '3;4', '5;6']
+    expected = ['A;B;C;D', '1;2;3;4', '1;2;5;6']
+    on_clause = '1 EQ 1'
+    self.assertEqual(expected, Join(left_content, right_content, on_clause))
+
 class TestAppend(unittest.TestCase):
   def test_basic(self):
     lines = ['LOAD table FROM "data";',
@@ -465,6 +504,54 @@ class TestAppend(unittest.TestCase):
     with TempFile('data', content):
       actual = ExecAndRead(lines, 'out.csv')
     self.assertEqual(expected, actual)
-  
+
+def Pivot(content, command, source, target):
+  lines = ['LOAD {} FROM "in.csv";'.format(source),
+           command,
+           'DUMP {} TO "out.csv";'.format(target)]
+  with TempFile('in.csv', content):
+    return ExecAndRead(lines, 'out.csv')
+
+class TestPivot(unittest.TestCase):
+  def test_basic(self):
+    content = ['A;B', '0;1', '2;3', '4;5']
+    command = 'PIVOT table;'
+    expected = ['col_1;col_2;col_3', '0;2;4', '1;3;5']
+    self.assertEqual(expected, Pivot(content, command, 'table', 'table'))
+
+  def test_change_target(self):
+    content = ['A', '1']
+    command = 'PIVOT table TO other;'
+    expected = ['col_1', '1']
+    self.assertEqual(expected, Pivot(content, command, 'table', 'other'))
+
+  def test_with_new_headers(self):
+    content = ['county;men;women', 'Foo;10;11', 'Bar;14;12', 'Baz;23;25']
+    command = 'PIVOT table WITH NEW_HEADERS_FROM county;'
+    expected = ['Foo;Bar;Baz', '10;14;23', '11;12;25']
+    self.assertEqual(expected, Pivot(content, command, 'table', 'table'))
+
+  def test_with_old_headers(self):
+    content = ['PSL;PO;PiS', '12;25;31']
+    command = 'PIVOT table WITH OLD_HEADERS_TO party;'
+    expected = ['party;col_1', 'PSL;12', 'PO;25', 'PiS;31']
+    self.assertEqual(expected, Pivot(content, command, 'table', 'table'))
+
+  def test_all_options(self):
+    content = ['City;Citizens;Eligible;Voters',
+               'Warszawa;1800;1500;1200',
+               'Krakow;800;700;500',
+               'Wroclaw;700;600;550',
+               'Lodz;650;500;380',
+               'Poznan;550;400;370',
+               'Gdansk;500;400;340']
+    command = ('PIVOT source TO target WITH NEW_HEADERS_FROM City ' +
+              'WITH OLD_HEADERS_TO datum;')
+    expected = ['datum;Warszawa;Krakow;Wroclaw;Lodz;Poznan;Gdansk',
+                'Citizens;1800;800;700;650;550;500',
+                'Eligible;1500;700;600;500;400;400',
+                'Voters;1200;500;550;380;370;340']
+    self.assertEqual(expected, Pivot(content, command, 'source', 'target'))
+
 if __name__ == '__main__':
   unittest.main()
