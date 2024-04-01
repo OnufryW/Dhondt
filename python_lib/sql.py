@@ -299,11 +299,7 @@ def GetExprList(tokens):
       columnname = ForcePop(tokens, WORD).value
       expr_list.append(command.SingleExpression(expr, columnname))
     else:
-      range_begin_token = TryPop(tokens, NUMBER)
-      range_begin = int(range_begin_token.value) if range_begin_token else 1
-      ForcePop(tokens, SYMBOL, ':')
-      range_end_token = TryPop(tokens, NUMBER)
-      range_end = int(range_end_token.value) if range_end_token else -1
+      range_begin, range_end = GetRange(tokens)
       header_expr = None
       if TryPop(tokens, WORD, 'AS'):
         header_expr = GetExpression(tokens)

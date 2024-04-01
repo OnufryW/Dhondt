@@ -127,6 +127,10 @@ class Dump(Command):
   def Eval(self, tables, params):
     name = self.name.Eval(params)
     path = self.path.Eval(params)
+    if name not in tables:
+      raise ValueError(self.ErrorStr(),
+          'Name "{}" not in tables: {}'.format(
+              name, tables.keys()))
     assert name in tables
     header, rows = tables[name]
     if path == 'stdout':
