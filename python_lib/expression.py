@@ -24,27 +24,31 @@ class AggregateExpr(Expression):
     self.op = acc[1]
 
   # For aggregated expressions, the context includes a special key,
-  # __aggregates, which stores the aggregated data. This value of this key
-  # is a standard 'context' map where values are not individual elements, 
+  # __group_data, which stores the aggregated data. This value of this key
+  # is a standard 'data' map where values are not individual elements, 
   # but lists (where the list is the full list of values that grouped up to
   # the row we're currently evaluating).
   def Eval(self, context):
-    # __group_context stores a list of sub-contexts, one for each row.
+    # __group_data stores a list of sub-contexts, one for each row.
     # We Eval the child expression in the context of every row, one
     # by one, and then apply the aggregation.
-    if '__group_context' not in context:
+    if '__group_data' not in context:
       raise ValueError(self.ErrorStr(),
                        'Cannot evaluate outside of aggregation context')
     acc = self.base
-    for inner_context in context['__group_context']:
-      row_context = context | inner_context
-      del row_context['__group_context']
-      val = self.child.Eval(row_context)
+    original_data = context['__data']
+    group_context = context['__group_data']
+    del context['__group_data']
+    for inner_context in group_context:
+      context['__data'] = original_data | inner_context
+      val = self.child.Eval(context)
       try:
         acc = self.op(acc, val)
       except Exception as e:
         raise ValueError(self.ErrorStr(),
             'When accumulating {} to {}'.format(acc, val)) from e
+    context['__data'] = original_data
+    context['__group_data'] = group_context
     return acc
 
 class BinaryExpr(Expression):
@@ -146,16 +150,12 @@ class RangeExpr(Expression):
 
   def Eval(self, context):
     val = self.acc[0]
-    end = self.end
+    beg = self.beg.Eval(context) - 1
+    end = self.end.Eval(context) - 1
     if end < 0:
-      end = context['$$last']
-    for col in range(self.beg, end):
-      argpos = str(col)
-      if argpos not in context:
-        raise ValueError(
-            self.ErrorStr(),
-            '{} not present in context: {}'.format(argpos, context))
-      arg = context[argpos]
+      end = context['?last']
+    for col in range(beg, end):
+      arg = context['__data'][col]
       try:
         val = self.acc[1](val, arg)
       except Exception as e:
@@ -167,10 +167,10 @@ class RangeExpr(Expression):
 # for each party over and over again; instead of doing it once. However,
 # I expect O(10) parties and O(40) districts, so it should be fine.
 class DhondtExpr(Expression):
-  def __init__(self, seats, votes, beg, end, token):
+  def __init__(self, seats, myvotes, beg, end, token):
     super().__init__(token, 'dhondt')
     self.seats = seats
-    self.votes = votes
+    self.myvotes = myvotes
     self.beg = beg
     self.end = end
 
@@ -194,57 +194,75 @@ class DhondtExpr(Expression):
     return res
 
   def Eval(self, context):
-    end = self.end
+    beg = self.beg.Eval(context) - 1
+    end = self.end.Eval(context) - 1
     if end < 0:
-      end = context['$$last']
-    votes = []
-    for col in range(self.beg, end):
-      argpos = str(col)
-      if argpos not in context:
-        raise ValueError(self.ErrorStr(),
-            '{} not present in context: {}'.format(argpos, context))
-      votes.append(context[argpos])
+      end = context['?last']
+    my_index = self.myvotes.Eval(context) - 1
+    if my_index < beg or my_index >= end:
+      raise ValueError(self.ErrorStr(),
+        ('Second argument of dhondt {} should be in the range [{},{}) ' +
+         'specified by the third').format(my_index, beg, end))
+    other_votes = [context['__data'][col]
+                   for col in range(beg, end) if col != my_index]
+    my_votes = context['__data'][my_index]
     seats = self.seats.Eval(context)
-    my_votes = self.votes.Eval(context)
-    # Need to remove "my_votes" from votes. There are two ways to do this
-    # - either my votes are unique in votes, or they're coming from $?, in
-    # which case I assume they're $?.
-    positions = []
-    for i, v in enumerate(votes):
-      if v == my_votes:
-        positions.append(i)
-    if len(positions) == 0:
-      raise ValueError(self.ErrorStr(),
-          'My votes {} are not in all the votes numbers {}'.format(
-              my_votes, votes))
-    if len(positions) == 1:
-      votes.pop(positions[0])
-      return self.Calc(my_votes, positions[0] - 0.5, votes, seats)
-    if '__dynamic' not in context or '?' not in context['__dynamic']:
-      raise ValueError(self.ErrorStr(),
-          'Cannot disambiguate which vote is mine',
-          '{} votes appear on positions {} of votes array {}'.format(
-              my_votes, positions, votes))
-    var = int(context['__dynamic']['?'])
-    if var - self.beg not in positions:
-      raise ValueError(self.ErrorStr(),
-          'Cannot disambiguate which vote is mine',
-          '{} votes appear on positions {} of votes array {}'.format(
-              my_votes, positions, votes))
-    votes.pop(var - self.beg)
-    return self.Calc(my_votes, var - self.beg - 0.5, votes, seats)
+    return self.Calc(my_votes, my_index-beg-0.5, other_votes, seats)
 
 def GetValueFromContext(name, context):
-  if '__dynamic' in context and name in context['__dynamic']:
-    name = context['__dynamic'][name]
-  if name not in context:
-    raise ValueError('Name {} not present in context: {}'.format(
-        name, context.keys()))
-  return context[name]
+  origname = name
+  backtracks = 0
+  # TODO: Could I avoid evaluating this with every single row, while still
+  # allowing reference variables to work?
+  while name.startswith('!'):
+    backtracks += 1
+    name = name[1:]
+  path = [name]
+  while True:
+    curname = path[-1]
+    try:
+      curname = int(curname) - 1
+      break
+    except:
+      pass
+    if curname not in context:
+      if len(path) == 1:
+        raise ValueError('Name {} not present in context: {}'.format(
+            name, context.keys()))
+      else:
+        raise ValueError(
+            'Name {} (reached via path {}) not in context {}'.format(
+                name, path, context.keys()))
+    if len(path) > len(context) + 1:
+      raise ValueError('A loop while resolving {} in context {}: {}'.format(
+          path[0], context.keys(), path))
+    path.append(context[curname])
+  if backtracks == 0:
+    if isinstance(context['__data'], dict):
+      if curname not in context['__data']:
+        if '__group_data' in context and curname in context['__group_data']:
+          raise ValueError(
+              ('Referring to non-group-key column {} ({}) outside ' +
+               'of aggregation').format(origname, curname))
+        else:
+          raise ValueError(
+            'Referring to value {} ({}) outside of range of columns'.format(
+                origname, curname))
+    else:
+      assert isinstance(context['__data'], list)
+      if curname >= len(context['__data']):
+        raise ValueError(('Referring to value {} ({}) outside ' +
+                          'of range of columns').format(origname, curname))
+    return context['__data'][curname]
+  elif backtracks > len(path):
+    raise ValueError('Too many !s in {}: {}, resolution path is {}'.format(
+        origname, backtracks, path))
+  else:
+    return path[-backtracks]
 
 class Variable(Expression):
   def __init__(self, name, token):
-    super().__init__(token, 'variable ' + name)
+    super().__init__(token, 'variable ' + str(name))
     self.name = name
 
   def Eval(self, context):

@@ -211,7 +211,6 @@ class SingleExpression:
     new_header[self.columnname] = len(new_header)
 
   def AppendValues(self, context, row, header, input_row):
-    context['$$last'] = len(header) + 1
     try:
       row.append(self.expr.Eval(context))
     except Exception as e:
@@ -222,56 +221,54 @@ class SingleExpression:
 class RangeExpression:
   def __init__(self, expr, range_beg, range_end, header_expr):
     self.expr = expr
-    self.range_beg = range_beg - 1
-    self.range_end = range_end - 1
+    self.range_beg = range_beg
+    self.range_end = range_end
     self.header_expr = header_expr
 
   def AppendHeader(self, new_header, old_header):
+    context = RowContext(None, old_header)
+    self.beg = self.range_beg.Eval(context)
+    self.end = self.range_end.Eval(context)
     old_header_rev = {}
     for x in old_header:
       old_header_rev[old_header[x]] = x
-    self.range_end = self.range_end if self.range_end >= 0 else len(old_header)
-    for col in range(self.range_beg, self.range_end):
-      col_header = old_header_rev[col]
-      if self.header_expr is not None:
-        context = {'?header': col_header}
-        col_header = self.header_expr.Eval(context)
+    for col in range(self.beg - 1, self.end - 1):
+      context['?'] = old_header_rev[col]
+      col_header = self.header_expr.Eval(context)
       new_header[col_header] = len(new_header)
 
   def AppendValues(self, context, row, header, input_row):
-    if '__dynamic' not in context:
-      context['__dynamic'] = {}
     header_rev = {}
     for name in header:
       header_rev[header[name]] = name
-    for x in range(self.range_beg, self.range_end):
-      context['__dynamic']['?'] = str(x + 1)
-      context['?header'] = header_rev[x]
-      context['$$last'] = len(header) + 1
+    for x in range(self.beg - 1, self.end - 1):
+      context['?'] = header_rev[x]
       try:
         row.append(self.expr.Eval(context))
       except Exception as e:
         msg = 'Failure evaluating {} (column {} in range {}-{}) for row {}'
         raise ValueError(msg.format(header_rev[x], x+1, self.range_beg+1,
                                     self.range_end+1, input_row)) from e
-    del context['__dynamic']['?']
 
 def SourceAndTarget(source, target, tables, params):
   source_table = source.Eval(params)
+  if source_table not in tables:
+    raise ValueError('Source table {} not present in tables: {}'.format(
+        source_table, tables.keys()))
   assert source_table in tables
   if target is not None:
     target_table = target.Eval(params)
-    assert target_table not in tables
+    if target_table in tables:
+      raise ValueError('Target table {} already present in tables!'.format(
+          target_table))
   else:
     target_table = source_table
   return source_table, target_table
 
 def RowContext(row, header):
-  context = {}
-  for i in range(len(row)):
-    context[str(i+1)] = row[i]
+  context = {'?last': len(header) + 1, '__data': row}
   for x in header:
-    context[x] = row[header[x]]
+    context[x] = header[x] + 1
   return context
 
 class Transform(Command):
@@ -338,23 +335,20 @@ class Aggregate(Command):
     new_rows = []
     for agg_key in groups:
       # Define the evaluation context.
-      context = {'__group_context': [{} for _ in groups[agg_key]]}
+      context = {'__group_data': [{} for _ in groups[agg_key]], '__data':{}}
       for column in header:
         col_num = header[column]
-        if header[column] in group_keys:
-          context[column] = groups[agg_key][0][col_num]
-          context[str(col_num + 1)] = groups[agg_key][0][col_num]
+        context[column] = col_num + 1
+        if col_num in group_keys:
+          context['__data'][col_num] = groups[agg_key][0][col_num]
         else:
           for i, row in enumerate(groups[agg_key]):
-            row_context = context['__group_context'][i]
-            row_context[column] = row[col_num]
-            row_context[str(col_num + 1)] = row[col_num]
+            context['__group_data'][i][col_num] = row[col_num]
       # The 'debug' row value
-      debug_row = [context[x] for x in context if x != '__group_context']
+      debug_row = [context['__data'][x] for x in context['__data']]
       # Calculate the expressions.
       new_row = []
       for expr in self.expr_list:
-        # TODO:  
         expr.AppendValues(context, new_row, header, debug_row)
       assert len(new_row) == len(new_header)
       new_rows.append(new_row)
@@ -464,6 +458,18 @@ class Append(Command):
               len(row), table, len(tables[table][0])))
     tables[table][1].append(row)
 
+class Drop(Command):
+  def __init__(self, line, table):
+    super().__init__(line, 'DROP')
+    self.table = table
+
+  def Eval(self, tables, params):
+    target = self.table.Eval(params)
+    if target not in tables:
+      raise ValueError(self.ErrorStr(), 'Table {} not in tables: {}'.format(
+          target, tables.keys()))
+    del tables[target]
+
 class Pivot(Command):
   def __init__(self, line, source, target, headers_from, headers_to):
     super().__init__(line, 'PIVOT')
@@ -482,10 +488,10 @@ class Pivot(Command):
     if self.headers_from:
       headers_from = self.headers_from.Eval(params)
       if headers_from not in tables[source][0]:
-        raise ValueError(
-          self.ErrorStr(),
-          'Source table {} does not have requested header column {}'.format(
-              source, headers_from))
+        raise ValueError(self.ErrorStr(),
+          ('Source table {} does not have requested header column {}, ' +
+           'present columns are {}').format(
+              source, headers_from, tables[source][0].keys()))
       header_column_index = tables[source][0][headers_from]
       skipped_source_col = header_column_index
       header_for_row = lambda i, row: row[header_column_index]

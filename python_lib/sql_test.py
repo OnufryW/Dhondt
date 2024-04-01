@@ -52,7 +52,11 @@ class TestTokenize(unittest.TestCase):
                      fullTokens('A = 4'))
 
 def evaluate(s, c={}):
-  return sql.GetExpression(tokenizer.tokenize([s])).Eval(c)
+  context = {'__data': []}
+  for x in c:
+    context['__data'].append(c[x])
+    context[x] = len(context['__data'])
+  return sql.GetExpression(tokenizer.tokenize([s])).Eval(context)
 
 class TestExpression(unittest.TestCase):
   def test_integer(self):
@@ -101,18 +105,12 @@ class TestExpression(unittest.TestCase):
     self.assertEqual(9, evaluate('sum_range(2:5)',
                                  {'1': 1, '2': 2, '3': 3, '4': 4}))
 
-  def test_aggregate(self):
-    self.assertEqual(9, evaluate('sum(arg)',
-                                 {'__group_context': [{'arg': 3}, {'arg': 6}]}))
-
   def dhondt_helper(self, seats, votes, expected):
     context = {}
     for i, v in enumerate(votes):
       context[str(i+1)] = v
-    context['__dynamic'] = {}
     for i, v in enumerate(votes):
-      context['__dynamic']['?'] = str(i+1)
-      expr = 'dhondt({}, {}, 1:{})'.format(seats, v, len(votes) + 1)
+      expr = 'dhondt({}, {}, 1:{})'.format(seats, i+1, len(votes) + 1)
       self.assertEqual(expected[i], evaluate(expr, context))
 
   def test_dhondt(self):
@@ -298,6 +296,18 @@ class TestTransform(unittest.TestCase):
     expected = ['Val', '2', '3', '-3']
     self.assertEqual(expected, Transform(content, command))
 
+  def test_range_concat(self):
+    content = ['A;B;C', 'c;a;t', 'd;o;g']
+    command = 'concat_range(:) AS val'
+    expected = ['val', 'cat', 'dog']
+    self.assertEqual(expected, Transform(content, command))
+
+  def test_complex_range_concat(self):
+    content = ['L;A;B;C;D;E', '3;d;o;g;x;x', '5;h;o;r;s;e', '4;d;o;v;e;x']
+    command = 'concat_range([2:int($1) + 2]) AS animal'
+    expected = ['animal', 'dog', 'horse', 'dove']
+    self.assertEqual(expected, Transform(content, command))
+
   def test_range_expression_simple(self):
     content = ['ColA;ColB;ColC', '1;2;3']
     command = '$? FOR 2:4'
@@ -308,7 +318,7 @@ class TestTransform(unittest.TestCase):
     content = ['ID;Seats;B;C;D', 'X;5;10;7;3', 'Y;3;13;5;12']
     command = ['LOAD t FROM "in";',
                'TRANSFORM t WITH ID AS ID, int($?) FOR 2:;',
-               'TRANSFORM t WITH ID AS ID, dhondt(Seats, $?, 3:) FOR 3:;'
+               'TRANSFORM t WITH ID AS ID, dhondt(Seats, $!?, 3:) FOR 3:;'
                'DUMP t TO "out";']
     expected = ['ID;B;C;D', 'X;3;2;0', 'Y;2;0;1']
     with TempFile('in', content):
@@ -316,8 +326,14 @@ class TestTransform(unittest.TestCase):
 
   def test_range_expression_custom_header(self):
     content = ['ColA;ColB;ColC', '1;2;3', '4;5;6']
-    command = '$? FOR 2: AS $?header + "_new"'
+    command = '$? FOR 2: AS $!!? + "_new"'
     expected = ['ColB_new;ColC_new', '2;3', '5;6']
+    self.assertEqual(expected, Transform(content, command))
+
+  def test_range_expression_custom_range(self):
+    content = ['A;B;C;D', '1;2;3;4']
+    command = '$? FOR [$!A:$!D-1]'
+    expected = ['A;B', '1;2']
     self.assertEqual(expected, Transform(content, command))
 
   def test_refer_variable(self):
@@ -334,8 +350,14 @@ class TestTransform(unittest.TestCase):
 
   def test_header_access(self):
     content = ['A;B', 'x;y', 'z;v']
-    command = '$?header + $? FOR 1:'
+    command = '$!!? + $? FOR 1:'
     expected = ['A;B', 'Ax;By', 'Az;Bv']
+    self.assertEqual(expected, Transform(content, command))
+
+  def test_numeric_header_access(self):
+    content = ['A;B', '1;2', '3;4']
+    command = '$!? + int($?) FOR 1:'
+    expected = ['A;B', '2;4', '4;6']
     self.assertEqual(expected, Transform(content, command))
 
 def Aggregate(content, aggregate):

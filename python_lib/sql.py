@@ -25,6 +25,7 @@ TERNARY_FUNCTIONS = {
   'replace': lambda a, b, c: a.replace(b, c),
 }
 RANGE_FUNCTIONS = {
+  'concat_range': ('', lambda a, b: a + b),
   'sum_range': (0, lambda a, b: a + b),
   'and_range': (True, lambda a, b: a and b),
 }
@@ -86,11 +87,36 @@ def GetNumber(token):
     return expression.Constant(float(token.value), token)
 
 def GetRange(tokens):
-  beg = TryPop(tokens, NUMBER)
-  beg = int(beg.value) if beg else 1
-  ForcePop(tokens, SYMBOL, ':')
-  end = TryPop(tokens, NUMBER)
-  end = int(end.value) if end else -1
+  if rangetoken := TryPop(tokens, SYMBOL, '['):
+    if midtoken := TryPop(tokens, SYMBOL, ':'):
+      beg = expression.Constant(1, midtoken)
+    else:
+      beg = GetExpression(tokens)
+      midtoken = ForcePop(tokens, SYMBOL, ':')
+    if TryPop(tokens, SYMBOL, ']'):
+      end = expression.Variable('!?last', midtoken)
+    else:
+      endval = GetExpression(tokens)
+      end = expression.If(
+          expression.BinaryExpr(
+              endval, expression.Constant(0, midtoken), lambda a, b: a < b,
+              midtoken, '<'),
+          expression.Variable('!?last', midtoken), endval, midtoken)
+      ForcePop(tokens, SYMBOL, ']')
+    return beg, end
+  begtoken = TryPop(tokens, NUMBER)
+  midtoken = ForcePop(tokens, SYMBOL, ':')
+  endtoken = TryPop(tokens, NUMBER)
+  if begtoken:
+    beg = expression.Constant(int(begtoken.value), begtoken)
+  else:
+    beg = expression.Constant(1, midtoken)
+  endval = int(endtoken.value) if endtoken else -1
+  endtoken = endtoken if endtoken else midtoken
+  end = expression.If(
+            expression.Constant(endval < 0, endtoken),
+            expression.Variable('!?last', endtoken),
+            expression.Constant(endval, endtoken), endtoken)
   return beg, end
 
 def GetFactor(tokens):
@@ -300,7 +326,7 @@ def GetExprList(tokens):
       expr_list.append(command.SingleExpression(expr, columnname))
     else:
       range_begin, range_end = GetRange(tokens)
-      header_expr = None
+      header_expr = expression.Variable('!!?', asorfor)
       if TryPop(tokens, WORD, 'AS'):
         header_expr = GetExpression(tokens)
       expr_list.append(command.RangeExpression(
@@ -405,6 +431,10 @@ def GetPivot(tokens, line):
       FailedPop(tokens, ['Option for pivot'])
   return command.Pivot(line, table, target, headers_from, headers_to)
 
+def GetDrop(tokens, line):
+  table = GetWordOrVar(tokens)
+  return command.Drop(line, table)
+
 def GetBody(tokens):
   if t := TryPop(tokens, WORD, 'LOAD'):
     return GetLoadTable(tokens, t.line)
@@ -422,6 +452,8 @@ def GetBody(tokens):
     return GetAppend(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'PIVOT'):
     return GetPivot(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'DROP'):
+    return GetDrop(tokens, t.line)
   else:
     FailedPop(tokens, ['Invalid command'])
 
@@ -512,6 +544,9 @@ def GetCommand(tokens):
 # the headers of the old table be (if unselected, no such column is created)
 # The "TO" option gives the name of the output table. If not chosen, the
 # pivot output overwrites the source table.
+
+##### Drop a table, so that we can reuse the name.
+# drop = DROP word_or_variable
 
 def GetCommandList(lines):
   tokens = tokenizer.tokenize(lines)
