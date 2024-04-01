@@ -19,6 +19,9 @@ class VariableOrValue:
   def __init__(self, variable_or_value, is_value, line, start, end):
     self.variable_or_value = variable_or_value
     self.is_value = is_value
+    self.line = line
+    self.start = start
+    self.end = end
 
   def Eval(self, params):
     if self.is_value:
@@ -26,8 +29,7 @@ class VariableOrValue:
     else:
       if self.variable_or_value not in params:
         raise ValueError(
-          'Failed to find paramter {} at line {}, positions {}:{}',
-          'Present parameters are {}'.format(
+          'Failed to find paramter {} at line {}, positions {}:{}. Present parameters are {}'.format(
               self.variable_or_value, self.line, self.start, self.end,
               ' '.join(list(params.keys()))))
       return params[self.variable_or_value]
@@ -205,6 +207,7 @@ class SingleExpression:
     new_header[self.columnname] = len(new_header)
 
   def AppendValues(self, context, row, header, input_row):
+    context['$$last'] = len(header) + 1
     try:
       row.append(self.expr.Eval(context))
     except Exception as e:

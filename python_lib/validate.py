@@ -5,7 +5,35 @@ import sys
 
 import sql
 
-assert len(sys.argv) == 3
+def printhelp(exitcode):
+  print('Usage:')
+  print('python3 validate.py PATH_TO_CONFIG_FILE PATH_TO_VALIDATION_FILE [OPTIONS] [PARAMS]')
+  print()
+  print('Valid options:')
+  print('--samples_printed X')
+  print('--allow_partial_success')
+  print()
+  print('Params are 2 strings - the key and the value for the tested table')
+  sys.exit(exitcode)
+
+if len(sys.argv) < 3:
+  printhelp(1)
+
+samples_printed = 1
+full_success_required = True
+params = {}
+pos = 3
+while pos < len(sys.argv):
+  if sys.argv[pos] == '--samples_printed':
+    samples_printed = int(sys.argv[pos+1])
+    pos += 2
+  elif sys.argv[pos] == '--allow_partial_success':
+    full_success_required = False
+    pos += 1
+  else:
+    params[sys.argv[pos]] = sys.argv[pos+1]
+    pos += 2
+
 # Note: A part of the logic could be in a config file. The reason I'm not
 # doing this is because I don't want to hardcode the absolute path to the
 # config file; and at the same time I don't want to force cwd to be in
@@ -19,7 +47,7 @@ validator_commands = [
 
 validator = sql.GetCommandList(validator_commands)
 context = {}
-validator.Eval(context, {})
+validator.Eval(context, params)
 assert 'v_table' in context
 
 header, rows = context['v_table']
@@ -34,11 +62,8 @@ for i, row in enumerate(rows):
     incorrect_rows.append((i, row))
 
 if not incorrect_rows:
-  print('Validation fully successful')
+  print('Validation of {} fully successful'.format(sys.argv[1]))
   sys.exit(0)
-else:
-  print('Validation failed, {} / {} rows incorrect'.format(
-      len(incorrect_rows), len(rows)))
 
 failures = []
 
@@ -52,11 +77,27 @@ for column in range(1, len(rows[0])):
       failure_count += 1
   if failure_count:
     failures.append(
-        (failure_count, column, failure_sample[0]))
+        (not reverse_header[column].startswith('optional_'),
+         failure_count, column, failure_sample[0]))
+
+if not full_success_required:
+  partial_success = True
+  for failure in failures:
+    if failure[0]:
+      partial_success = False
+  if partial_success:
+    print(
+        'Validation of {} successful, {}/{} rows with soft failures'.format(
+            sys.argv[1], len(incorrect_rows), len(rows)))
+    sys.exit(0)
+
+print('Validation of {} failed, {} / {} rows incorrect'.format(
+    sys.argv[1], len(incorrect_rows), len(rows)))
 
 def PrintFailure(failure):
-  print('Failure {}, with {} / {} rows failing, sample row {}'.format(
-      reverse_header[failure[1]], failure[0], len(rows), failure[2]))
+  print('{}ailure {}, with {} / {} rows failing, sample row {}'.format(
+      'F' if failure[0] else 'Soft f',
+      reverse_header[failure[2]], failure[1], len(rows), failure[3]))
 
 def PrintRow(index):
   header, rows = context['table']
@@ -71,7 +112,7 @@ failures.sort()
 failures.reverse()
 for i, failure in enumerate(failures):
   PrintFailure(failure)
-  if i < 1:
-    PrintRow(failure[2])
+  if i < samples_printed:
+    PrintRow(failure[3])
 
 sys.exit(1)
