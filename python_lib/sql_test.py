@@ -252,11 +252,17 @@ class TestCommandList(unittest.TestCase):
 
   def test_import_chdir(self):
     content = SomeContent()
+    removeTestdata = False
+    if not os.path.exists('testdata'):
+      removeTestdata = True
+      os.makedirs('testdata')
     command = ['IMPORT "testdata/config";', 'DUMP t TO "out";']
     child = ['LOAD t FROM "in";']
     with TempFile('testdata/in', content):
       with TempFile('testdata/config', child):
         outfile = ExecAndRead(command, 'out')
+    if removeTestdata:
+      os.rmdir('testdata')
     self.assertEqual(content, outfile)
 
 def Transform(content, exprs):
