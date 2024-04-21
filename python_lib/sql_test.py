@@ -581,5 +581,23 @@ class TestPivot(unittest.TestCase):
                 'Voters;1200;500;550;380;370;340']
     self.assertEqual(expected, Pivot(content, command, 'source', 'target'))
 
+class TestVisualize(unittest.TestCase):
+  def test(self):
+    content = ['my_id;my_data', '1;10']
+    command = ['LOAD table FROM "in.csv";',
+               'TRANSFORM table WITH $1 AS my_id, int($2) AS my_data;',
+               'VISUALIZE table TO "out.bmp"',
+               '                 WITH BASE "test_3_3"',
+               '                 WITH LOWER BOUND 10',
+               '                 WITH HIGHER BOUND 12',
+               '                 WITH ID my_id',
+               '                 WITH DATA my_data',
+               '                 WITH COLOURS "green5";']
+    # We just test it doesn't raise.
+    with TempFile('in.csv', content):
+      runnable = sql.GetCommandList(command)
+      runnable.Eval({}, {})
+    os.remove('out.bmp')
+
 if __name__ == '__main__':
   unittest.main()

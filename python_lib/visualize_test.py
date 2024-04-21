@@ -1,5 +1,8 @@
 import unittest
 
+import os
+import imageio.v3 as iio
+
 import visualize as v
 
 class TestBoundaries(unittest.TestCase):
@@ -44,6 +47,38 @@ class TestBoundaries(unittest.TestCase):
             0.7424, 0, -0.0093]
     self.assertEqual([-0.4, -0.2, 0, 0.19999999999999996, 0.4, 0.6],
                      v.getProposedBounds(vals, 7))
+
+class TestVisualize(unittest.TestCase):
+  def verify(self, expected, filename):
+    result = iio.imread(uri=filename)
+    os.remove(filename)
+    self.assertEqual(3, len(result))
+    for x in range(3):
+      self.assertEqual(3, len(result[x]))
+      for y in range(3):
+        for clr in range(3):
+          self.assertEqual(expected[x][y][clr], result[x][y][clr])
+   
+
+  def test_visualize_manual_bounds(self):
+    data = {1: 10, 2: 20}
+    colours = 'test3'
+    filename = './test.bmp'
+    v.Visualize(data, filename, 'test_3_3', 'test3', 12, 14)
+    expected = [[[0,0,3], [0,0,1], [0,0,3]],
+                [[255,255,255], [0,0,1], [255,255,255]],
+                [[0,0,3], [0,0,1], [0,0,3]]]
+    self.verify(expected, filename)
+
+  def test_visualize_automated_bounds(self):
+    data = {1: 9, 2: 21, 3: 29, 4: 41}
+    colours = 'test3'
+    filename = './test.bmp'
+    v.Visualize(data, filename, 'test_3_3', 'test3', None, None)
+    expected = [[[0,0,2], [0,0,1], [0,0,2]],
+                [[0,0,2], [0,0,1], [0,0,3]],
+                [[0,0,2], [0,0,1], [0,0,2]]]
+    self.verify(expected, filename)
 
 if __name__ == '__main__':
   unittest.main()

@@ -9,11 +9,19 @@
 
 import os
 import sys
+import visualize
 
 SEPARATOR = 'separator'
 PREFIX = 'prefix'
 EXTRA_PARAMS = 'extra_params'
 EXTRA_TABLES = 'extra_tables'
+
+class Const:
+  def __init__(self, value):
+    self.value = value
+
+  def Eval(self, params):
+    return self.value
 
 class VariableOrValue:
   def __init__(self, variable_or_value, is_value, line, start, end):
@@ -41,6 +49,31 @@ class Command:
 
   def ErrorStr(self):
     return self.command + ' in line ' + str(self.line + 1)
+
+  def Raise(self, msg):
+    raise ValueError('FAILED ' + self.ErrorStr() + ': ', msg)
+
+  def RaiseFrom(self, msg, e):
+    raise ValueError('FAILED ' + self.ErrorStr() + ': ', msg, str(e)) from e
+
+  def Source(self, source, tables, params):
+    source_table = source.Eval(params)
+    if source_table not in tables:
+      self.Raise('Source table {} not present in tables: {}'.format(
+          source_table, tables.keys()))
+    return source_table
+
+  def SourceAndTarget(self, source, target, tables, params):
+    source_table = self.Source(source, tables, params)
+    if target is not None:
+      target_table = target.Eval(params)
+      if target_table in tables:
+        self.Raise('Target table {} already present in tables!'.format(
+            target_table))
+    else:
+      target_table = source_table
+    return source_table, target_table
+
 
 class Load(Command):
   def __init__(self, line, name, path, options={}):
@@ -93,13 +126,11 @@ class Load(Command):
         header_row_parsed = True
         continue
       if len(r) != len(header):
-        raise ValueError(
-            'FAILED {}: Line {} has length {}, header has length {}'.format(
-                self.ErrorStr(), row_number, len(r), len(header)), header,
-                r)
+        self.Raise('Line {} has length {}, header has length {}'.format(
+            row_number, len(r), len(header)))
       rows.append(r)
     if header is None:
-      raise ValueError('FAILED {}: No lines in file'.format(self.ErrorStr()))
+      self.Raise('No lines in file')
     return (header, rows)
 
   def Eval(self, tables, params):
@@ -125,13 +156,8 @@ class Dump(Command):
 
   # Dump into a headered SSV file
   def Eval(self, tables, params):
-    name = self.name.Eval(params)
+    name = self.Source(self.name, tables, params)
     path = self.path.Eval(params)
-    if name not in tables:
-      raise ValueError(self.ErrorStr(),
-          'Name "{}" not in tables: {}'.format(
-              name, tables.keys()))
-    assert name in tables
     header, rows = tables[name]
     if path == 'stdout':
       self.WriteLines(header, rows, sys.stdout)
@@ -168,9 +194,7 @@ class Import(Command):
       try:
         child_command = self.parser(config_file.readlines())
       except Exception as e:
-        raise ValueError(
-            'FAILED {}: Failure parsing imported file {}'.format(
-                self.ErrorStr(), path)) from e 
+        self.RaiseFrom('Failure parsing imported file {}'.format(path), e)
     # Step two: prepare the new parameters for the execution.
     child_params = {}
     # TODO: consider an option where we're explicitly not passing params in
@@ -185,20 +209,21 @@ class Import(Command):
     # Step four: prepare child tables.
     child_tables = {}
     for table in self.extra_tables:
-      table_name = table.Eval(params)
-      assert table_name in tables
+      table_name = self.Source(table, tables, params)
       child_tables[table_name] = tables[table_name]
     # Step five: actually execute child
     try:
       child_command.Eval(child_tables, child_params)
     except ValueError as e:
-      raise ValueError('Failure in imported file ' + path) from e
+      self.RaiseFrom('Failure in imported file ' + path, e)
     # Step six: roll back the directory shift
     os.chdir(oldpath)
     # Step seven: copy results of child execution into parent tables
     for table in child_tables:
       new_table_name = self.prefix + table
-      assert new_table_name not in tables
+      if new_table_name in tables:
+        self.Raise('Cannot import table {}, it already exists'.format(
+            new_table_name))
       tables[new_table_name] = child_tables[table]
 
 class SingleExpression:
@@ -250,21 +275,6 @@ class RangeExpression:
         raise ValueError(msg.format(header_rev[x], x+1, self.range_beg+1,
                                     self.range_end+1, input_row)) from e
 
-def SourceAndTarget(source, target, tables, params):
-  source_table = source.Eval(params)
-  if source_table not in tables:
-    raise ValueError('Source table {} not present in tables: {}'.format(
-        source_table, tables.keys()))
-  assert source_table in tables
-  if target is not None:
-    target_table = target.Eval(params)
-    if target_table in tables:
-      raise ValueError('Target table {} already present in tables!'.format(
-          target_table))
-  else:
-    target_table = source_table
-  return source_table, target_table
-
 def RowContext(row, header):
   context = {'?last': len(header) + 1, '__data': row}
   for x in header:
@@ -279,7 +289,7 @@ class Transform(Command):
     self.expr_list = expr_list
 
   def Eval(self, tables, params):
-    source_table, target_table = SourceAndTarget(
+    source_table, target_table = self.SourceAndTarget(
         self.source_table, self.target_table, tables, params)
     header, rows = tables[source_table]
     new_header = {}
@@ -288,11 +298,15 @@ class Transform(Command):
     new_rows = []
     for row in rows:
       new_row = []
-      assert len(row) == len(header)
+      if len(row) != len(header):
+        self.Raise('Row {} has length {}, expected {}'.format(
+            row, len(row), len(header)))
       # Construct the expression evaluation context
       for expr in self.expr_list:
         expr.AppendValues(RowContext(row, header), new_row, header, row)
-      assert len(new_row) == len(new_header)
+      if len(new_row) != len(new_header):
+        self.Raise('Calculated row {} has length {}, expected {}'.format(
+            new_row, len(new_row), len(new_header)))
       new_rows.append(new_row)
     tables[target_table] = (new_header, new_rows)
 
@@ -305,7 +319,7 @@ class Aggregate(Command):
     self.expr_list = expr_list
 
   def Eval(self, tables, params):
-    source_table, target_table = SourceAndTarget(
+    source_table, target_table = self.SourceAndTarget(
         self.source_table, self.target_table, tables, params)
     header, rows = tables[source_table]
 
@@ -320,7 +334,8 @@ class Aggregate(Command):
       if isinstance(group_key, int):
         group_keys.add(group_key - 1)
       else:
-        assert group_key in header
+        if group_key not in header:
+          self.Raise('Unknown group key {}'.format(group_key))
         group_keys.add(header[group_key])
 
     # Accumulate the set of groups, and rows associated with each.
@@ -350,7 +365,9 @@ class Aggregate(Command):
       new_row = []
       for expr in self.expr_list:
         expr.AppendValues(context, new_row, header, debug_row)
-      assert len(new_row) == len(new_header)
+      if len(new_row) != len(new_header):
+        self.Raise('Calculated row {} has length {}, expected {}'.format(
+            new_row, len(new_row), len(new_header)))
       new_rows.append(new_row)
 
     tables[target_table] = (new_header, new_rows)
@@ -377,9 +394,7 @@ class Join(Command):
       if key not in keys:
         if self.unmatched_values:
           return empty_row
-        raise ValueError(
-            self.ErrorStr(), 'Failed to find key {} in table {}'.format(
-                key, left_table))
+        self.Raise('Failed to find key {} in table {}'.format(key, left_table))
       keys[key][1] = True
       return keys[key][0]
     elif self.comparator == 'PREFIX':
@@ -387,28 +402,25 @@ class Join(Command):
       for preflen in range(len(key)+1):
         if key[:preflen] in keys:
           if found_prefix is not None:
-            raise ValueError(
-                self.ErrorStr(),
-                'Found two prefixes matching {}: {} and {}'.format(
-                    key, found_prefix, key[:preflen]))
+            self.Raise('Found two prefixes matching {}: {} and {}'.format(
+                key, found_prefix, key[:preflen]))
           found_prefix = key[:preflen]
       if found_prefix is None:
         if self.unmatched_values:
           return empty_row
-        raise ValueError(self.ErrorStr(),
-                         'Failed to find prefix for key {}'.format(key))
+        self.Raise('Failed to find prefix for key {}'.format(key))
       keys[found_prefix][1] = True
       return keys[found_prefix][0]
 
   def Eval(self, tables, params):
-    left_table = self.left_table.Eval(params)
-    right_table = self.right_table.Eval(params)
-    target_table = self.target_table.Eval(params)
-    assert left_table in tables
+    left_table = self.Source(self.left_table, tables, params)
     left_header, left_rows = tables[left_table]
-    assert right_table in tables
+    right_table = self.Source(self.right_table, tables, params)
     right_header, right_rows = tables[right_table]
-    assert target_table not in tables
+    target_table = self.target_table.Eval(params)
+    if target_table in tables:
+      self.Raise('Cannot create table {}, it already exists'.format(
+          target_table))
     header = {}
     for column in left_header:
       header[column] = left_header[column]
@@ -432,10 +444,8 @@ class Join(Command):
           if self.unmatched_keys == 'INCLUDE':
             rows.append(keys[key][0] + empty_row)
           else:
-            raise ValueError(
-                self.ErrorStr(),
-                'Key {} from {} not matched by any value'.format(
-                    key, left_table))
+            self.Raise('Key {} from {} not matched by any value'.format(
+                key, left_table))
     tables[target_table] = (header, rows)
 
 class Append(Command):
@@ -445,17 +455,13 @@ class Append(Command):
     self.table = table
 
   def Eval(self, tables, params):
-    table = self.table.Eval(params)
-    if table not in tables:
-      raise ValueError(self.ErrorStr(), 'Table {} not found'.format(table))
+    table = self.Source(self.table, tables, params)
     row = []
     for expr in self.expr_list:
       row.append(expr.Eval({}))
     if len(row) != len(tables[table][0]):
-      raise ValueError(
-          self.ErrorStr(),
-          'Provided {} values, while table {} has {} columns'.format(
-              len(row), table, len(tables[table][0])))
+      self.Raise('Provided {} values, while table {} has {} columns'.format(
+          len(row), table, len(tables[table][0])))
     tables[table][1].append(row)
 
 class Drop(Command):
@@ -464,10 +470,7 @@ class Drop(Command):
     self.table = table
 
   def Eval(self, tables, params):
-    target = self.table.Eval(params)
-    if target not in tables:
-      raise ValueError(self.ErrorStr(), 'Table {} not in tables: {}'.format(
-          target, tables.keys()))
+    target = self.Source(self.table, tables, params)
     del tables[target]
 
 class Pivot(Command):
@@ -479,7 +482,7 @@ class Pivot(Command):
     self.headers_to = headers_to
 
   def Eval(self, tables, params):
-    source, target = SourceAndTarget(
+    source, target = self.SourceAndTarget(
         self.source, self.target, tables, params)
     skipped_source_col = None
     header = {}
@@ -488,9 +491,9 @@ class Pivot(Command):
     if self.headers_from:
       headers_from = self.headers_from.Eval(params)
       if headers_from not in tables[source][0]:
-        raise ValueError(self.ErrorStr(),
-          ('Source table {} does not have requested header column {}, ' +
-           'present columns are {}').format(
+        self.Raise(
+          'Source table {} does not have requested header column {}, ' +
+          'present columns are {}'.format(
               source, headers_from, tables[source][0].keys()))
       header_column_index = tables[source][0][headers_from]
       skipped_source_col = header_column_index
@@ -522,7 +525,7 @@ class Pivot(Command):
     for i, row in enumerate(tables[source][1]):
       h = header_for_row(i, row)
       if h in header.keys():
-        raise ValueError(
+        self.Raise(
             'Header column {} contains duplicate key {} in row {}'.format(
                 headers_from, h, i))
       header[h] = i if self.headers_to is None else i + 1
@@ -530,4 +533,44 @@ class Pivot(Command):
         if target_row(j) is not None:
           rows[target_row(j)].append(val)
     tables[target] = (header, rows)
-   
+
+class Visualize(Command):
+  def __init__(self, line, table, outfile, base, colours, idname, dataname,
+               lowb, highb):
+    super().__init__(line, 'VISUALIZE')
+    self.table = table
+    self.outfile = outfile
+    self.base = base
+    self.colours = colours if colours is not None else 'greyscale5'
+    self.idname = idname if idname is not None else Const('id')
+    self.dataname = dataname if dataname is not None else Const('data')
+    self.lowbound = lowb
+    self.highbound = highb
+
+  def GetColumnIndex(self, var, params, header):
+    name = var.Eval(params)
+    if name not in header:
+      self.Raise('Unknown column name {}, column names are {}'.format(
+          name, header.keys()))
+    return header[name]
+
+  def Eval(self, tables, params):
+    header, rows = tables[self.Source(self.table, tables, params)]
+    idcol = self.GetColumnIndex(self.idname, params, header)
+    datacol = self.GetColumnIndex(self.dataname, params, header)
+    base = self.base.Eval(params)
+    outfile = self.outfile.Eval(params)
+    data = {}
+    if self.lowbound is None and self.highbound is not None:
+      self.Raise('High bound specified, but low bound is not')
+    if self.highbound is None and self.lowbound is not None:
+      self.Raise('Low bound specified, but high bound is not')
+    high = float(self.highbound) if self.highbound is not None else None
+    low = float(self.lowbound) if self.lowbound is not None else None
+    for row in rows:
+      data[row[idcol]] = row[datacol]
+    try:
+      visualize.Visualize(data, outfile, base, self.colours, low, high)
+    except Exception as e:
+      self.RaiseFrom('Failed to visualize', e)
+

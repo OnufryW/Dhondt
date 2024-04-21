@@ -435,6 +435,39 @@ def GetDrop(tokens, line):
   table = GetWordOrVar(tokens)
   return command.Drop(line, table)
 
+def GetVisualize(tokens, line):
+  table = GetWordOrVar(tokens)
+  ForcePop(tokens, WORD, 'TO')
+  outfile = GetQuotedOrVar(tokens)
+  base = None
+  colours = None
+  idname = None
+  dataname = None
+  lowerBound = None
+  higherBound = None
+  while TryPop(tokens, WORD, 'WITH'):
+    if TryPop(tokens, WORD, 'BASE'):
+      base = GetQuotedOrVar(tokens)
+    elif TryPop(tokens, WORD, 'COLOURS'):
+      colours = ForcePop(tokens, QUOTED).value
+    elif TryPop(tokens, WORD, 'ID'):
+      idname = GetWordOrVar(tokens)
+    elif TryPop(tokens, WORD, 'DATA'):
+      dataname = GetWordOrVar(tokens)
+    elif TryPop(tokens, WORD, 'LOWER'):
+      ForcePop(tokens, WORD, 'BOUND')
+      lowerBound = ForcePop(tokens, NUMBER).value
+    elif TryPop(tokens, WORD, 'HIGHER'):
+      ForcePop(tokens, WORD, 'BOUND')
+      higherBound = ForcePop(tokens, NUMBER).value
+    else:
+      FailedPop(tokens, ['Invalid option for visualize'])
+  if base is None:
+    print('Missing WITH BASE for VISUALIZE command in line', line)
+    raise ValueError('Missing WITH BASE for VISUALIZE command in line', line)
+  return command.Visualize(line, table, outfile, base, colours, idname,
+                           dataname, lowerBound, higherBound)
+
 def GetBody(tokens):
   if t := TryPop(tokens, WORD, 'LOAD'):
     return GetLoadTable(tokens, t.line)
@@ -454,6 +487,8 @@ def GetBody(tokens):
     return GetPivot(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'DROP'):
     return GetDrop(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'VISUALIZE'):
+    return GetVisualize(tokens, t.line)
   else:
     FailedPop(tokens, ['Invalid command'])
 
@@ -547,6 +582,28 @@ def GetCommand(tokens):
 
 ##### Drop a table, so that we can reuse the name.
 # drop = DROP word_or_variable
+
+##### Visualize a table, dumping it to a bmp file.
+# visualize = VISUALIZE word_or_variable
+#    TO quoted_or_variable
+#    WITH BASE quoted_or_variable
+#    [WITH COLOURS quoted]
+#    [WITH ID word_or_variable]
+#    [WITH DATA word_or_variable]
+#    [WITH LOWER BOUND number]
+#    [WITH HIGHER BOUND number]
+#
+# Dumps the table into a bmp file (the name is provided after TO). The base
+# (and templates list) is the WITH BASE argument.
+# If WITH COULOURS is provided, it should be a valid colour scheme.
+# If WITH ID is provided, it is the name of the column containing the IDs
+#   of the geographical areas; the values in that column must match the
+#   names used by the chosen base. By default, the column name 'id' is used.
+# If WITH DATA is provided, it is the name of the column containing the data
+#   to visualize (which should be numbers). By default, 'data' is used.
+# If WITH {LOWER / HIGHER} BOUND is provided, it is used at the lower or
+#   higher bound for the data colour bands. For now, if you provide one,
+#   you need to provide both.
 
 def GetCommandList(lines):
   tokens = tokenizer.tokenize(lines)

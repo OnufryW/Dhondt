@@ -1,9 +1,16 @@
 import imageio.v3 as iio
-import ipympl
+# import ipympl
 import math
-import matplotlib.pyplot as plt
-import numpy as np
+# import matplotlib.pyplot as plt
+# import numpy as np
+import os
+import pathlib
 import sys
+from visual_templates import template_tools
+
+def VisualizeError(Exception):
+  def __init__(self, msg):
+    super().__init__(msg)
 
 def ceilD(val, D):
   """Returns the smallest multiple of D which is no less than val."""
@@ -116,10 +123,12 @@ def getProposedBounds(vals, numBands, tolerance=0.5):
       targetSize = len(vals) / numBands
       diffSkip = D * (numBands - 2)
       delta = tolerance * targetSize
-      lowDiff = floorD(vals[math.floor(len(vals) - targetSize - delta)] -
-                       vals[math.ceil(targetSize + delta)], diffSkip)
-      highDiff = ceilD(vals[math.ceil(len(vals) - targetSize + delta)] -
-                       vals[math.floor(targetSize - delta)], diffSkip)
+      lowDiff = floorD(
+          vals[math.floor(max(len(vals) - targetSize - delta, 0))] -
+          vals[math.ceil(targetSize + delta)], diffSkip)
+      highDiff = ceilD(
+          vals[min(math.ceil(len(vals) - targetSize + delta), len(vals) - 1)] -
+          vals[math.floor(targetSize - delta)], diffSkip)
       bestErr = None
       currDiff = max(0, lowDiff)
       while True:
@@ -137,4 +146,47 @@ def getProposedBounds(vals, numBands, tolerance=0.5):
         return [best[0] + k * best[1] / (numBands - 2) 
                 for k in range(numBands - 1)]
     startingD /= 10
+
+colourScales = {
+  'greyscale5': [[255,255,255], [190,190,190], [125,125,125], [60,60,60],
+                 [0,0,0]],
+  'green5': [[77,255,77], [0,204,0], [0,153,0], [0,102,0], [0,64,0]],
+  'red5': [[255,102,102], [230,26,26], [179,0,0], [128,0,0], [77,0,0]],
+  'blue5': [[0,255,255], [0,191,255], [0,128,255], [0,64,255], [0,0,191]],
+  'test3': [[0,0,1], [0,0,2], [0,0,3]],
+}
+
+def Visualize(data, outfile, basename, colours, lowbound, highbound):
+  if colours not in colourScales:
+    raise VisualizeError('Unknown colour scale: {}'.format(colours))
+  cols = colourScales[colours]
+  nb = len(cols)
+  if lowbound is None:
+    boundaries = getProposedBounds(data.values(), nb)
+  else:
+    boundaries = [
+        (k*highbound + (nb-k-2)*lowbound) / (nb-2) for k in range(nb-1)]
+  basedir = pathlib.Path(__file__).parent.resolve() / 'visual_templates'
+  if not (basedir / basename).exists():
+    raise VisualizeError('Unknown visualization base ' + basename)
+  try:
+    base = iio.imread(uri=str(basedir / basename / 'base.bmp'))
+  except Exception as e:
+    raise VisualizeError('Unknown visualization base ' + basename) from e
+  for datum in data:
+    datum_tmpl = basedir / basename / (str(datum) + '.template')
+    if not datum_tmpl.exists():
+      raise VisualizeError('Unknown region {} in base {}'.format(
+          datum, basename))
+    with datum_tmpl.open('r') as datum_tmpl_file:
+      template = template_tools.read_template(datum_tmpl_file)
+    colIndex = 0
+    while colIndex < len(boundaries) and data[datum] >= boundaries[colIndex]:
+      colIndex += 1
+    template_tools.apply_template(base, template, cols[colIndex])
+  # TODO: Add legend.
+  iio.imwrite(uri=outfile, image=base)
+
+    
+    
 
