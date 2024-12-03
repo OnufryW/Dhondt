@@ -10,7 +10,8 @@ UNARY_FUNCTIONS = {
   'sqrt': lambda a: math.sqrt(a),
   'int': lambda a: int(a),
   'len': lambda a: len(a),
-  'not': lambda a: not a
+  'not': lambda a: not a,
+  'abs': lambda a: abs(a)
 }
 BINARY_FUNCTIONS = {
   'min': lambda a, b: min(a,b),
