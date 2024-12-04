@@ -15,6 +15,7 @@ SEPARATOR = 'separator'
 PREFIX = 'prefix'
 EXTRA_PARAMS = 'extra_params'
 EXTRA_TABLES = 'extra_tables'
+PARAM_PREFIX = 'param_prefix'
 
 class Const:
   def __init__(self, value):
@@ -186,6 +187,8 @@ class Import(Command):
         {} if EXTRA_PARAMS not in options else options[EXTRA_PARAMS])
     self.extra_tables = (
         [] if EXTRA_TABLES not in options else options[EXTRA_TABLES])
+    self.param_prefix = (
+        '' if PARAM_PREFIX not in options else options[PARAM_PREFIX])
 
   def Eval(self, tables, params):
     path = self.path.Eval(params)
@@ -199,7 +202,8 @@ class Import(Command):
     child_params = {}
     # TODO: consider an option where we're explicitly not passing params in
     for param in params:
-      child_params[param] = params[param]
+      if param.startswith(self.param_prefix):
+        child_params[param[len(self.param_prefix):]] = params[param]
     for param in self.extra_params:
       child_params[param] = self.extra_params[param].Eval(params)
     # Step three: prepare to shift directory

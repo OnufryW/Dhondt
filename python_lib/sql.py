@@ -311,6 +311,9 @@ def GetImport(tokens, line):
       if command.EXTRA_TABLES not in options:
         options[command.EXTRA_TABLES] = []
       options[command.EXTRA_TABLES].append(table_name)
+    elif TryPop(tokens, WORD, 'PARAM_PREFIX'):
+      prefix = ForcePop(tokens, WORD)
+      options[command.PARAM_PREFIX] = prefix.value
     else:
       FailedPop(tokens, ['Invalid optional argument to IMPORT'])
   return command.Import(line, path, options, GetCommandList)
