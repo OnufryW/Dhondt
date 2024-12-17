@@ -19,8 +19,12 @@ def consumeQuotedWord(s, tokenList, line, curpos):
   if s and (s[0] == '"' or s[0] == '\''):
     quote = s[0]
     endpos = 1
+    if len(s) == 1:
+      raise ValueError('Unclosed quote at the end of the line ' + str(line))
     while s[endpos] != quote:
       endpos += 1
+      if endpos >= len(s):
+        raise ValueError('Unclosed quote: ' + s + ' in line ' + str(line))
     tokenList.append(
         Token(s[1:endpos], QUOTED, line, curpos, curpos+endpos+1))
     s = s[endpos+1:]
@@ -66,6 +70,7 @@ def tokenize(lines):
       continue
     curbeg = 0
     while s:
+      print(s)
       curlen = len(s)
       curbeg, s = consumeWord(s, res, l, curbeg)
       curbeg, s = consumeQuotedWord(s, res, l, curbeg)

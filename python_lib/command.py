@@ -55,7 +55,8 @@ class Command:
     raise ValueError('FAILED ' + self.ErrorStr() + ': ', msg)
 
   def RaiseFrom(self, msg, e):
-    raise ValueError('FAILED ' + self.ErrorStr() + ': ', msg, str(e)) from e
+    raise ValueError('FAILED ' + self.ErrorStr() + ': ', msg, str(e)
+        ).with_traceback(e.__traceback__) from None
 
   def Source(self, source, tables, params):
     source_table = source.Eval(params)
@@ -137,8 +138,12 @@ class Load(Command):
   def Eval(self, tables, params):
     assert self.name not in tables
     path = self.path.Eval(params)
-    with open(path, 'r') as inf:
-      tables[self.name] = self.ReadLines(inf.readlines())
+    try:
+      with open(path, 'r') as inf:
+        tables[self.name] = self.ReadLines(inf.readlines())
+    except BaseException as e:
+      self.RaiseFrom('Failed to read from {}'.format(path), e)
+    return []
 
 class Dump(Command):
   def __init__(self, line, name, path, options={}):
@@ -161,10 +166,41 @@ class Dump(Command):
     path = self.path.Eval(params)
     header, rows = tables[name]
     if path == 'stdout':
-      self.WriteLines(header, rows, sys.stdout)
+      res = []
+      res.append(self.options[SEPARATOR].join(header))
+      for row in rows:
+        res.append(self.options[SEPARATOR].join([str(x) for x in row]))
+      return res
     else:
       with open(path, 'x') as outf:
         self.WriteLines(header, rows, outf)
+      return []
+
+class List(Command):
+  def __init__(self, line):
+    super().__init__(line, "LIST TABLES")
+  
+  def Eval(self, tables, params):
+    return tables.keys()
+
+class Describe(Command):
+  def __init__(self, line, name):
+    super().__init__(line, "DESCRIBE")
+    self.name = name
+
+  def Eval(self, tables, params):
+    name = self.Source(self.name, tables, params)
+    header, rows = tables[name]
+    res = []
+    if not rows:
+      for column in header:
+        res.append(column)
+    else:
+      for i, column in enumerate(header):
+        res.append('{}: sample value {} of type {}'.format(
+            column, str(rows[0][i]), str(type(rows[0][i]))[8:-2]))
+    res.append('{} rows in total'.format(len(rows)))
+    return res
 
 # A sequence of commands to be executed one by one.
 class Sequence:
@@ -172,8 +208,10 @@ class Sequence:
     self.seq = seq
 
   def Eval(self, tables, params):
+    res = []
     for comm in self.seq:
-      comm.Eval(tables, params)
+      res.extend(comm.Eval(tables, params))
+    return res
 
 # A request to execute another file. The parser is passed in, because
 # there's a circular dependency here I need to resolve somehow.
@@ -191,13 +229,17 @@ class Import(Command):
         '' if PARAM_PREFIX not in options else options[PARAM_PREFIX])
 
   def Eval(self, tables, params):
+    res = []
     path = self.path.Eval(params)
     # Step one: Parse the relevant file.
-    with open(path, 'r') as config_file:
-      try:
-        child_command = self.parser(config_file.readlines())
-      except Exception as e:
-        self.RaiseFrom('Failure parsing imported file {}'.format(path), e)
+    try:
+      with open(path, 'r') as config_file:
+        try:
+          child_command = self.parser(config_file.readlines())
+        except Exception as e:
+          self.RaiseFrom('Failure parsing imported file {}'.format(path), e)
+    except OSError as e:
+      self.RaiseFrom('Failed to open file {}'.format(path), e)
     # Step two: prepare the new parameters for the execution.
     child_params = {}
     # TODO: consider an option where we're explicitly not passing params in
@@ -217,11 +259,12 @@ class Import(Command):
       child_tables[table_name] = tables[table_name]
     # Step five: actually execute child
     try:
-      child_command.Eval(child_tables, child_params)
+      res = child_command.Eval(child_tables, child_params)
     except ValueError as e:
       self.RaiseFrom('Failure in imported file ' + path, e)
-    # Step six: roll back the directory shift
-    os.chdir(oldpath)
+    finally:
+      # Step six: roll back the directory shift
+      os.chdir(oldpath)
     # Step seven: copy results of child execution into parent tables
     for table in child_tables:
       new_table_name = self.prefix + table
@@ -229,6 +272,7 @@ class Import(Command):
         self.Raise('Cannot import table {}, it already exists'.format(
             new_table_name))
       tables[new_table_name] = child_tables[table]
+    return res
 
 class SingleExpression:
   def __init__(self, expr, columnname):
@@ -276,14 +320,39 @@ class RangeExpression:
         row.append(self.expr.Eval(context))
       except Exception as e:
         msg = 'Failure evaluating {} (column {} in range {}-{}) for row {}'
-        raise ValueError(msg.format(header_rev[x], x+1, self.range_beg+1,
-                                    self.range_end+1, input_row)) from e
+        raise ValueError(msg.format(header_rev[x], x+1, self.beg+1,
+                                    self.end+1, input_row)) from e
 
 def RowContext(row, header):
   context = {'?last': len(header) + 1, '__data': row}
   for x in header:
     context[x] = header[x] + 1
   return context
+
+class Filter(Command):
+  def __init__(self, line, source_table, target_table, expr):
+    super().__init__(line, "FILTER")
+    self.source_table = source_table
+    self.target_table = target_table
+    self.expr = expr
+
+  def Eval(self, tables, params):
+    source_table, target_table = self.SourceAndTarget(
+        self.source_table, self.target_table, tables, params)
+    header, rows = tables[source_table]
+    new_rows = []
+    for row in rows:
+      if len(row) != len(header):
+        self.Raise('Row {} has length {}, expected {}'.format(row, len(row),
+            len(header)))
+      try:
+        val = self.expr.Eval(RowContext(row, header))
+        if val:
+          new_rows.append(row)
+      except Exception as e:
+        self.RaiseFrom('Failed to evaluate filter for row '.format(row), e)
+    tables[target_table] = (header, new_rows)
+    return []
 
 class Transform(Command):
   def __init__(self, line, source_table, target_table, expr_list):
@@ -313,6 +382,7 @@ class Transform(Command):
             new_row, len(new_row), len(new_header)))
       new_rows.append(new_row)
     tables[target_table] = (new_header, new_rows)
+    return []
 
 class Aggregate(Command):
   def __init__(self, line, source_table, target_table, group_list, expr_list):
@@ -375,6 +445,7 @@ class Aggregate(Command):
       new_rows.append(new_row)
 
     tables[target_table] = (new_header, new_rows)
+    return []
 
 class Join(Command):
   def __init__(self, line, left_table, right_table, target_table,
@@ -451,6 +522,7 @@ class Join(Command):
             self.Raise('Key {} from {} not matched by any value'.format(
                 key, left_table))
     tables[target_table] = (header, rows)
+    return []
 
 class Append(Command):
   def __init__(self, line, expr_list, table):
@@ -467,6 +539,7 @@ class Append(Command):
       self.Raise('Provided {} values, while table {} has {} columns'.format(
           len(row), table, len(tables[table][0])))
     tables[table][1].append(row)
+    return []
 
 class Drop(Command):
   def __init__(self, line, table):
@@ -476,6 +549,7 @@ class Drop(Command):
   def Eval(self, tables, params):
     target = self.Source(self.table, tables, params)
     del tables[target]
+    return []
 
 class Pivot(Command):
   def __init__(self, line, source, target, headers_from, headers_to):
@@ -537,6 +611,7 @@ class Pivot(Command):
         if target_row(j) is not None:
           rows[target_row(j)].append(val)
     tables[target] = (header, rows)
+    return []
 
 class Visualize(Command):
   def __init__(self, line, table, outfile, base, colours, idname, dataname,
@@ -577,4 +652,5 @@ class Visualize(Command):
       visualize.Visualize(data, outfile, base, self.colours, low, high)
     except Exception as e:
       self.RaiseFrom('Failed to visualize', e)
+    return []
 

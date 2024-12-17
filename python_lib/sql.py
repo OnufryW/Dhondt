@@ -53,17 +53,12 @@ def TryPop(tokens, expected_type=None, expected_value=None):
   return tokens.pop(0)
 
 def InvalidToken(message, token):
-  print(*message)
-  print('Actual token is', token.DebugString())
   raise ValueError(*message, token.DebugString())
 
 def FailedPop(tokens, message):
-  print(*message)
   if not tokens:
-    print('Token list empty!')
     raise ValueError(message, 'Token list empty')
   else:
-    print('First token is', tokens[0].DebugString())
     raise ValueError(message, tokens[0].DebugString())
 
 def ForcePop(tokens, expected_type=None, expected_value=None):
@@ -290,8 +285,10 @@ def GetLoadTable(tokens, line):
 
 def GetDumpTable(tokens, line):
   name = GetWordOrVar(tokens)
-  ForcePop(tokens, WORD, 'TO')
-  path = GetQuotedOrVar(tokens)
+  if TryPop(tokens, WORD, 'TO'):
+    path = GetQuotedOrVar(tokens)
+  else:
+    path = command.Const('stdout')
   return command.Dump(line, name, path)
 
 def GetImport(tokens, line):
@@ -435,9 +432,26 @@ def GetPivot(tokens, line):
       FailedPop(tokens, ['Option for pivot'])
   return command.Pivot(line, table, target, headers_from, headers_to)
 
+def GetFilter(tokens, line):
+  table = GetWordOrVar(tokens)
+  target = None
+  if TryPop(tokens, WORD, 'TO'):
+    target = GetWordOrVar(tokens)
+  ForcePop(tokens, WORD, 'BY')
+  expr = GetExpression(tokens)
+  return command.Filter(line, table, target, expr)
+
 def GetDrop(tokens, line):
   table = GetWordOrVar(tokens)
   return command.Drop(line, table)
+
+def GetList(tokens, line):
+  ForcePop(tokens, WORD, 'TABLES')
+  return command.List(line)
+
+def GetDescribe(tokens, line):
+  table = GetWordOrVar(tokens)
+  return command.Describe(line, table)
 
 def GetVisualize(tokens, line):
   table = GetWordOrVar(tokens)
@@ -467,7 +481,6 @@ def GetVisualize(tokens, line):
     else:
       FailedPop(tokens, ['Invalid option for visualize'])
   if base is None:
-    print('Missing WITH BASE for VISUALIZE command in line', line)
     raise ValueError('Missing WITH BASE for VISUALIZE command in line', line)
   return command.Visualize(line, table, outfile, base, colours, idname,
                            dataname, lowerBound, higherBound)
@@ -493,8 +506,14 @@ def GetBody(tokens):
     return GetDrop(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'VISUALIZE'):
     return GetVisualize(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'LIST'):
+    return GetList(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'DESCRIBE'):
+    return GetDescribe(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'FILTER'):
+    return GetFilter(tokens, t.line)
   else:
-    FailedPop(tokens, ['Invalid command'])
+    FailedPop(tokens, ['Expecting a command keyword.'])
 
 def GetCommand(tokens):
   body = GetBody(tokens)
@@ -509,7 +528,7 @@ def GetCommand(tokens):
 # load_table = LOAD word FROM quoted_or_var 
 #    [WITH SEPARATOR word]
 #    [WITH IGNORE QUOTED SEPARATOR]
-# dump_table = DUMP word TO quoted_or_var
+# dump_table = DUMP word [TO quoted_or_var]
 #   (TODO: again, dumping options, default to SSV? Something else?)
 #   (Allow 'quoted_or_var' to be STDOUT)
 # import data = IMPORT quoted_or_var [WITH PREFIX word]

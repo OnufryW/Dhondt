@@ -1,12 +1,10 @@
 import imageio.v3 as iio
-# import ipympl
 import math
-# import matplotlib.pyplot as plt
-# import numpy as np
 import os
 import pathlib
 import sys
 from visual_templates import template_tools
+import writing
 
 def VisualizeError(Exception):
   def __init__(self, msg):
@@ -156,6 +154,46 @@ colourScales = {
   'test3': [[0,0,1], [0,0,2], [0,0,3]],
 }
 
+def addLegend(img, colorscale, boundaries):
+  legendBot = img.shape[0]
+  legendTop = int(0.79 * legendBot)
+  legendWid = int(0.057 * img.shape[1])
+  legendSquareHgt = (legendBot - legendTop) // len(colorscale)
+  for index, color in enumerate(reversed(colorscale)):
+    for x in range(1, legendWid):
+      for y in range(legendBot - (index + 1) * legendSquareHgt,
+                     legendBot - index * legendSquareHgt - 1):
+        img[y][x][0] = color[0]
+        img[y][x][1] = color[1]
+        img[y][x][2] = color[2]
+        img[y][x][3] = 255
+    fontSize = None
+    for candFontSize in sorted(writing.FONTS):
+      if candFontSize < legendSquareHgt - 1:
+        fontSize = candFontSize
+    if not fontSize:
+      raise VisualizeError(
+          'Failed to find font size smaller than {} for legend'.format(
+              legendSquareHgt - 1))
+    basey = legendBot - (index + 1) * legendSquareHgt + (legendSquareHgt - fontSize)
+    basex = legendWid + 10
+    if index == len(boundaries):
+      basex = writing.putNumber(img, basex, basey, fontSize, boundaries[0])
+      basex += 2
+      basex = writing.putChar(img, basex, basey, fontSize, '-')
+    elif index == 0:
+      basex = writing.putNumber(img, basex, basey, fontSize, boundaries[-1])
+      basex += 2
+      basex = writing.putChar(img, basex, basey, fontSize, '+')
+    else:
+      basex = writing.putNumber(img, basex, basey, fontSize,
+                                boundaries[len(boundaries) - index - 1])
+      basex += 2
+      basex = writing.putChar(img, basex, basey, fontSize, '-')
+      basex += 2
+      basex = writing.putNumber(img, basex, basey, fontSize,
+                                boundaries[len(boundaries) - index])
+
 def Visualize(data, outfile, basename, colours, lowbound, highbound):
   if colours not in colourScales:
     raise VisualizeError('Unknown colour scale: {}'.format(colours))
@@ -184,9 +222,6 @@ def Visualize(data, outfile, basename, colours, lowbound, highbound):
     while colIndex < len(boundaries) and data[datum] >= boundaries[colIndex]:
       colIndex += 1
     template_tools.apply_template(base, template, cols[colIndex])
-  # TODO: Add legend.
+  addLegend(base, cols, boundaries)
   iio.imwrite(uri=outfile, image=base)
-
-    
-    
 
