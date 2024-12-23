@@ -463,6 +463,9 @@ def GetVisualize(tokens, line):
   dataname = None
   lowerBound = None
   higherBound = None
+  legend = None
+  title = None
+  header = None
   while TryPop(tokens, WORD, 'WITH'):
     if TryPop(tokens, WORD, 'BASE'):
       base = GetQuotedOrVar(tokens)
@@ -478,12 +481,21 @@ def GetVisualize(tokens, line):
     elif TryPop(tokens, WORD, 'HIGHER'):
       ForcePop(tokens, WORD, 'BOUND')
       higherBound = ForcePop(tokens, NUMBER).value
+    elif TryPop(tokens, WORD, 'TITLE'):
+      title = GetQuotedOrVar(tokens)
+    elif TryPop(tokens, WORD, 'HEADER'):
+      header = GetQuotedOrVar(tokens)
+    elif TryPop(tokens, WORD, 'LEGEND'):
+      legend = True
+      if TryPop(tokens, WORD, 'NONE'):
+        legend = False
     else:
       FailedPop(tokens, ['Invalid option for visualize'])
   if base is None:
     raise ValueError('Missing WITH BASE for VISUALIZE command in line', line)
   return command.Visualize(line, table, outfile, base, colours, idname,
-                           dataname, lowerBound, higherBound)
+                           dataname, lowerBound, higherBound, legend,
+                           header, title)
 
 def GetBody(tokens):
   if t := TryPop(tokens, WORD, 'LOAD'):

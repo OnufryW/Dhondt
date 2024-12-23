@@ -6,7 +6,7 @@ import sys
 from visual_templates import template_tools
 import writing
 
-def VisualizeError(Exception):
+class VisualizeError(Exception):
   def __init__(self, msg):
     super().__init__(msg)
 
@@ -155,18 +155,19 @@ colourScales = {
 }
 
 def addLegend(img, colorscale, boundaries):
-  legendBot = img.shape[0]
-  legendTop = int(0.79 * legendBot)
+  legendBot = img.shape[0] - 5
+  legendTop = int(0.79 * legendBot) - 5
   legendWid = int(0.057 * img.shape[1])
   legendSquareHgt = (legendBot - legendTop) // len(colorscale)
-  for index, color in enumerate(reversed(colorscale)):
+  for index, color in enumerate(colorscale):
     for x in range(1, legendWid):
       for y in range(legendBot - (index + 1) * legendSquareHgt,
                      legendBot - index * legendSquareHgt - 1):
         img[y][x][0] = color[0]
         img[y][x][1] = color[1]
         img[y][x][2] = color[2]
-        img[y][x][3] = 255
+        # if len(img[y][x] > 3):
+        #   img[y][x][3] = 255
     fontSize = None
     for candFontSize in sorted(writing.FONTS):
       if candFontSize < legendSquareHgt - 1:
@@ -177,24 +178,25 @@ def addLegend(img, colorscale, boundaries):
               legendSquareHgt - 1))
     basey = legendBot - (index + 1) * legendSquareHgt + (legendSquareHgt - fontSize)
     basex = legendWid + 10
-    if index == len(boundaries):
+    if index == 0:
+      basex = writing.putWord(img, basex, basey, fontSize, 'pon.')
+      basex += 2
       basex = writing.putNumber(img, basex, basey, fontSize, boundaries[0])
+    elif index == len(boundaries):
+      basex = writing.putWord(img, basex, basey, fontSize, 'pow.')
       basex += 2
-      basex = writing.putChar(img, basex, basey, fontSize, '-')
-    elif index == 0:
       basex = writing.putNumber(img, basex, basey, fontSize, boundaries[-1])
-      basex += 2
-      basex = writing.putChar(img, basex, basey, fontSize, '+')
     else:
       basex = writing.putNumber(img, basex, basey, fontSize,
-                                boundaries[len(boundaries) - index - 1])
+                                boundaries[index - 1])
       basex += 2
       basex = writing.putChar(img, basex, basey, fontSize, '-')
       basex += 2
       basex = writing.putNumber(img, basex, basey, fontSize,
-                                boundaries[len(boundaries) - index])
+                                boundaries[index])
 
-def Visualize(data, outfile, basename, colours, lowbound, highbound):
+def Visualize(data, outfile, basename, colours, lowbound, highbound,
+              legend=True, header=None, title=None):
   if colours not in colourScales:
     raise VisualizeError('Unknown colour scale: {}'.format(colours))
   cols = colourScales[colours]
@@ -222,6 +224,11 @@ def Visualize(data, outfile, basename, colours, lowbound, highbound):
     while colIndex < len(boundaries) and data[datum] >= boundaries[colIndex]:
       colIndex += 1
     template_tools.apply_template(base, template, cols[colIndex])
-  addLegend(base, cols, boundaries)
+  if legend:
+    addLegend(base, cols, boundaries)
+  if header:
+    writing.putStr(base, 0, 0, 12, header)
+  if title:
+    writing.putStr(base, base.shape[1] // 2, 0, 19, title)
   iio.imwrite(uri=outfile, image=base)
 

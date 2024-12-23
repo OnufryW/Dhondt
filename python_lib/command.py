@@ -615,7 +615,7 @@ class Pivot(Command):
 
 class Visualize(Command):
   def __init__(self, line, table, outfile, base, colours, idname, dataname,
-               lowb, highb):
+               lowb, highb, legend, header, title):
     super().__init__(line, 'VISUALIZE')
     self.table = table
     self.outfile = outfile
@@ -623,6 +623,10 @@ class Visualize(Command):
     self.colours = colours if colours is not None else 'greyscale5'
     self.idname = idname if idname is not None else Const('id')
     self.dataname = dataname if dataname is not None else Const('data')
+    self.legend = legend if legend is not None else True
+    self.header = header if header is not None else Const(
+        'Obliczenia i opracowanie mapy:\nMałgorzata i Jakub Onufry Wojtaszczyk')
+    self.title = title
     self.lowbound = lowb
     self.highbound = highb
 
@@ -639,6 +643,8 @@ class Visualize(Command):
     datacol = self.GetColumnIndex(self.dataname, params, header)
     base = self.base.Eval(params)
     outfile = self.outfile.Eval(params)
+    map_header = self.header.Eval(params)
+    map_title = self.title.Eval(params)
     data = {}
     if self.lowbound is None and self.highbound is not None:
       self.Raise('High bound specified, but low bound is not')
@@ -649,7 +655,8 @@ class Visualize(Command):
     for row in rows:
       data[row[idcol]] = row[datacol]
     try:
-      visualize.Visualize(data, outfile, base, self.colours, low, high)
+      visualize.Visualize(data, outfile, base, self.colours, low, high,
+                          self.legend, map_header, map_title)
     except Exception as e:
       self.RaiseFrom('Failed to visualize', e)
     return []
