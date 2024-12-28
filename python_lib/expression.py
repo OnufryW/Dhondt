@@ -260,6 +260,28 @@ def GetValueFromContext(name, context):
   else:
     return path[-backtracks]
 
+# The context is a dict containing:
+# - the mapping from column name to column index (1-indexed), for all columns
+# For column range definitions:
+# - the mapping from ? to the column name currently processed.
+# For filter and transform and join:
+# - the mapping from ?last to the length of the row + 1.
+# - the mapping from __data to the row (list of values, 0-indexed by column key)
+# For aggregate:
+# - the mapping from __group_data to a list of dicts, one for each row that
+#     is aggregated to the currently processed key values. The dict maps
+#     column numbers (0-indexed) to the values in that row.
+# - the mapping from __data to a dict from column number (0-indexed) to the
+#     value, for columns in the group key.
+# For aggregations within children of an aggregation expression:
+# - the mapping from __data to a dict from column number (0-indexed) to the
+#     value. Note this is still a dict, not a list (although it's guaranteed to
+#     be full, that is, contain all columns).
+# In header contexts, __data is None (and __group_data absent).
+
+# Notes:
+# - probably should add the mapping from ?last to the length of the row, adding.
+
 class Variable(Expression):
   def __init__(self, name, token):
     super().__init__(token, 'variable ' + str(name))
@@ -271,23 +293,94 @@ class Variable(Expression):
     except Exception as e:
       raise ValueError(self.ErrorStr()) from e
 
-class ReferVariable(Expression):
-  def __init__(self, name_var, token):
-    super().__init__(token, 'reference variable')
-    self.name_var = name_var
+class CurrExpr(Expression):
+  def __init__(self, token):
+    super().__init__(token, 'curr()')
 
   def Eval(self, context):
-    try:
-      name = self.name_var.Eval(context)
-    except Exception as e:
-      raise ValueError(
-          self.ErrorStr(), 'Failed to evaluate column name') from e
-    try:
-      return GetValueFromContext(name, context)
-    except Exception as e:
+    if '?' not in context:
+      raise ValueError(self.ErrorStr(), 
+                       'curr() can only be used in column range definitions')
+    index = context[context['?']]
+    if (isinstance(context['__data'], dict) and
+        index - 1 not in context['__data']):
       raise ValueError(self.ErrorStr(),
-                       'Evaluated value {} missing from context {}'.format(
-                           name, context.keys()))
+                       'Current column is not a part of the group key')
+    return context['__data'][index - 1]
+
+class CurrNameExpr(Expression):
+  def __init__(self, token):
+    super().__init__(token, 'currname()')
+
+  def Eval(self, context):
+    if '?' not in context:
+      raise ValueError(self.ErrorStr(), 
+                       'currname() can only be used in column range definitions')
+    return context['?']
+
+class AtExpr(Expression):
+  """ Evaluates the "at" function, taking either an column index or name,
+      and returning the value of that column.
+
+      In aggregation contexts, will only work if the column referred to is a
+      part of the group key.
+  """
+  def __init__(self, arg, token):
+    super().__init__(token, 'at')
+    self.arg = arg
+
+  def Eval(self, context):
+    arg = self.arg.Eval(context)
+    if isinstance(arg, str):
+      # Get column index from column name:
+      if arg not in context:
+        raise ValueError(self.ErrorStr(), 'column {} unknown'.format(arg))
+      arg = context[arg]
+    if arg <= 0 or arg >= context['?last']:
+      raise ValueError(self.ErrorStr(), 
+                       'column index {} out of range'.format(arg))
+    if isinstance(context['__data'], dict) and arg - 1 not in context['__data']:
+      # Trying to refer to a non-key column in an aggregation.
+      raise ValueError(self.ErrorStr(),
+                       'Column {} is not a part of the group key'.format(arg))
+    return context['__data'][arg - 1]
+
+class IndexExpr(Expression):
+  """ Evaluates the index (1-indexed) of a column, given a column name."""
+  def __init__(self, arg, token):
+    super().__init__(token, 'index')
+    self.arg = arg
+
+  def Eval(self, context):
+    arg = self.arg.Eval(context)
+    if isinstance(arg, int) and arg > 0 and arg < context['?last']:
+      return arg
+    if arg not in context:
+      raise ValueError(self.ErrorStr(), 'column {} unknown'.format(arg))
+    return context[arg]
+
+class NameExpr(Expression):
+  """ Evaluates the name of a column, given the 1-indexed index."""
+  def __init__(self, arg, token):
+    super().__init__(token, 'name')
+    self.arg = arg
+
+  def Eval(self, context):
+    arg = self.arg.Eval(context)
+    if isinstance(arg, str) and arg in context:
+      return arg
+    if not isinstance(arg, int):
+      raise ValueError(
+          self.ErrorStr(),
+          'Argument of name has to be an integer, got {}'.format(arg))
+    if arg <= 0 or arg >= context['?last']:
+      raise ValueError(self.ErrorStr(),
+                       'column index {} out of range'.format(arg))
+    for name in context:
+      if context[name] == arg:
+        return name
+    # For arg in the valid range, context has to contain a mapping to arg. 
+    assert(False)
 
 class Constant(Expression):
   def __init__(self, val, token):

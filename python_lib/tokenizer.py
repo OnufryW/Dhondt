@@ -34,7 +34,7 @@ def consumeQuotedWord(s, tokenList, line, curpos):
 def consumeVariable(s, tokenList, line, curpos):
   if s and s[0] == '$':
     pos = 1
-    while pos < len(s) and (s[pos].isalnum() or s[pos] in "_?!"):
+    while pos < len(s) and (s[pos].isalnum() or s[pos] == "_"):
       pos += 1
     tokenList.append(Token(s[1:pos], VARIABLE, line, curpos, curpos+pos))
     s = s[pos:]
@@ -70,7 +70,6 @@ def tokenize(lines):
       continue
     curbeg = 0
     while s:
-      print(s)
       curlen = len(s)
       curbeg, s = consumeWord(s, res, l, curbeg)
       curbeg, s = consumeQuotedWord(s, res, l, curbeg)

@@ -19,6 +19,8 @@ def printhelp(exitcode):
 if len(sys.argv) < 3:
   printhelp(1)
 
+print('Validating {}'.format(sys.argv[1]))
+
 samples_printed = 1
 full_success_required = True
 params = {}
@@ -42,7 +44,7 @@ while pos < len(sys.argv):
 validator_commands = [
   'IMPORT "{}";'.format(sys.argv[1]),
   'IMPORT "{}" WITH TABLE table WITH PREFIX v_;'.format(sys.argv[2]),
-  'TRANSFORM v_table WITH and_range(1:) AS all_correct, $? FOR 1:;'
+  'TRANSFORM v_table WITH and_range(1:) AS all_correct, curr() FOR 1:;'
 ]
 
 validator = sql.GetCommandList(validator_commands)

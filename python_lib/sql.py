@@ -36,7 +36,7 @@ AGGREGATE_FUNCTIONS = {
   'and': (0, lambda a, b: a + b),
 }
 SPECIAL_FUNCTIONS = {
-  'dhondt',
+  'dhondt', 'at', 'index', 'name', 'curr', 'currname',
 }
 FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys()) + list(RANGE_FUNCTIONS.keys()) + list(AGGREGATE_FUNCTIONS.keys()) + list(SPECIAL_FUNCTIONS)
 KEYWORDS = FUNCTION_NAMES + [
@@ -159,6 +159,24 @@ def GetFactor(tokens):
         beg, end = GetRange(tokens)
         ForcePop(tokens, SYMBOL, ')')
         return expression.DhondtExpr(seats, votes, beg, end, token)
+      elif token.value == 'curr':
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.CurrExpr(token)
+      elif token.value == 'currname':
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.CurrNameExpr(token)
+      elif token.value == 'at':
+        arg = GetExpression(tokens)
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.AtExpr(arg, token)
+      elif token.value == 'index':
+        arg = GetExpression(tokens)
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.IndexExpr(arg, token)
+      elif token.value == 'name':
+        arg = GetExpression(tokens)
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.NameExpr(arg, token)
       elif token.value in AGGREGATE_FUNCTIONS:
         arg = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ')')
@@ -170,11 +188,6 @@ def GetFactor(tokens):
     else:
       return expression.Variable(token.value, token)
   elif token.typ == VARIABLE:
-    if token.value == '':
-      ForcePop(tokens, SYMBOL, '(')
-      arg = GetExpression(tokens)
-      ForcePop(tokens, SYMBOL, ')')
-      return expression.ReferVariable(arg, token)
     return expression.Variable(token.value, token)
   elif token.typ == SYMBOL:
     if token.value == '(':

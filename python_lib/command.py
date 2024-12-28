@@ -287,9 +287,9 @@ class SingleExpression:
     try:
       row.append(self.expr.Eval(context))
     except Exception as e:
-      msg = 'Failure evaluating {} (column {}) for row {}'
+      msg = 'Failure evaluating {} (column {}) for row {}: {}'
       raise ValueError(msg.format(
-          self.columnname, len(row) + 1, input_row)) from e
+          self.columnname, len(row) + 1, input_row, str(e))) from e
 
 class RangeExpression:
   def __init__(self, expr, range_beg, range_end, header_expr):
@@ -424,10 +424,13 @@ class Aggregate(Command):
     new_rows = []
     for agg_key in groups:
       # Define the evaluation context.
-      context = {'__group_data': [{} for _ in groups[agg_key]], '__data':{}}
+      context = RowContext(None, header)
+      context['__group_data'] = [{} for _ in groups[agg_key]]
+      context['__data'] = {}
+      #context = {'__group_data': [{} for _ in groups[agg_key]], '__data':{}}
       for column in header:
         col_num = header[column]
-        context[column] = col_num + 1
+        #context[column] = col_num + 1
         if col_num in group_keys:
           context['__data'][col_num] = groups[agg_key][0][col_num]
         else:
@@ -570,8 +573,8 @@ class Pivot(Command):
       headers_from = self.headers_from.Eval(params)
       if headers_from not in tables[source][0]:
         self.Raise(
-          'Source table {} does not have requested header column {}, ' +
-          'present columns are {}'.format(
+          ('Source table {} does not have requested header column {}, ' +
+          'present columns are {}').format(
               source, headers_from, tables[source][0].keys()))
       header_column_index = tables[source][0][headers_from]
       skipped_source_col = header_column_index
