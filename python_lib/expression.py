@@ -209,68 +209,6 @@ class DhondtExpr(Expression):
     seats = self.seats.Eval(context)
     return self.Calc(my_votes, my_index-beg-0.5, other_votes, seats)
 
-def GetValueFromContext(name, context):
-  origname = name
-  backtracks = 0
-  # TODO: Could I avoid evaluating this with every single row, while still
-  # allowing reference variables to work?
-  while name.startswith('!'):
-    backtracks += 1
-    name = name[1:]
-  path = [name]
-  while True:
-    curname = path[-1]
-    try:
-      curname = int(curname) - 1
-      break
-    except:
-      pass
-    if curname not in context:
-      if len(path) == 1:
-        raise ValueError('Name {} not present in context: {}'.format(
-            name, context.keys()))
-      else:
-        raise ValueError(
-            'Name {} (reached via path {}) not in context {}'.format(
-                name, path, context.keys()))
-    if len(path) > len(context) + 1:
-      raise ValueError('A loop while resolving {} in context {}: {}'.format(
-          path[0], context.keys(), path))
-    path.append(context[curname])
-  if backtracks == 0:
-    if isinstance(context['__data'], dict):
-      if curname not in context['__data']:
-        if '__group_data' in context and curname in context['__group_data']:
-          raise ValueError(
-              ('Referring to non-group-key column {} ({}) outside ' +
-               'of aggregation').format(origname, curname))
-        else:
-          raise ValueError(
-            'Referring to value {} ({}) outside of range of columns'.format(
-                origname, curname))
-    else:
-      assert isinstance(context['__data'], list)
-      if curname >= len(context['__data']):
-        raise ValueError(('Referring to value {} ({}) outside ' +
-                          'of range of columns').format(origname, curname))
-    return context['__data'][curname]
-  elif backtracks > len(path):
-    raise ValueError('Too many !s in {}: {}, resolution path is {}'.format(
-        origname, backtracks, path))
-  else:
-    return path[-backtracks]
-
-class Variable(Expression):
-  def __init__(self, name, token):
-    super().__init__(token, 'variable ' + str(name))
-    self.name = name
-
-  def Eval(self, context):
-    try:
-      return GetValueFromContext(self.name, context)
-    except Exception as e:
-      raise ValueError(self.ErrorStr()) from e
-
 class NumColumnsExpr(Expression):
   def __init__(self, token):
     super().__init__(token, 'numcolumns()')

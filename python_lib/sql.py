@@ -82,17 +82,17 @@ def GetNumber(token):
   else:
     return expression.Constant(float(token.value), token)
 
-def GetRange(tokens):
+def GetRange(tokens, settings):
   if rangetoken := TryPop(tokens, SYMBOL, '['):
     if midtoken := TryPop(tokens, SYMBOL, ':'):
       beg = expression.Constant(1, midtoken)
     else:
-      beg = GetExpression(tokens)
+      beg = GetExpression(tokens, settings)
       midtoken = ForcePop(tokens, SYMBOL, ':')
     if TryPop(tokens, SYMBOL, ']'):
       end = expression.NumColumnsExpr(midtoken)
     else:
-      endval = GetExpression(tokens)
+      endval = GetExpression(tokens, settings)
       end = expression.If(
           expression.BinaryExpr(
               endval, expression.Constant(0, midtoken), lambda a, b: a < b,
@@ -115,7 +115,7 @@ def GetRange(tokens):
             expression.Constant(endval, endtoken), endtoken)
   return beg, end
 
-def GetFactor(tokens):
+def GetFactor(tokens, settings):
   token = ForcePop(tokens)
   if token.typ == NUMBER:
     return GetNumber(token)
@@ -123,23 +123,23 @@ def GetFactor(tokens):
     if token.value in FUNCTION_NAMES:
       ForcePop(tokens, SYMBOL, '(')
       if token.value in UNARY_FUNCTIONS:
-        arg = GetExpression(tokens)
+        arg = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         return expression.UnaryExpr(
             arg, UNARY_FUNCTIONS[token.value], token, token.value)
       elif token.value in BINARY_FUNCTIONS:
-        arg1 = GetExpression(tokens)
+        arg1 = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
-        arg2 = GetExpression(tokens)
+        arg2 = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         return expression.BinaryExpr(
             arg1, arg2, BINARY_FUNCTIONS[token.value], token, token.value)
       elif token.value in TERNARY_FUNCTIONS:
-        arg1 = GetExpression(tokens)
+        arg1 = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
-        arg2 = GetExpression(tokens)
+        arg2 = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
-        arg3 = GetExpression(tokens)
+        arg3 = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         if token.value == 'if':
           return expression.If(arg1, arg2, arg3, token)
@@ -147,16 +147,16 @@ def GetFactor(tokens):
             arg1, arg2, arg3, TERNARY_FUNCTIONS[token.value], token,
             token.value)
       elif token.value in RANGE_FUNCTIONS:
-        beg, end = GetRange(tokens)
+        beg, end = GetRange(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         return expression.RangeExpr(beg, end, RANGE_FUNCTIONS[token.value],
                                     token, token.value)
       elif token.value == 'dhondt':
-        seats = GetExpression(tokens)
+        seats = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
-        votes = GetExpression(tokens)
+        votes = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
-        beg, end = GetRange(tokens)
+        beg, end = GetRange(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         return expression.DhondtExpr(seats, votes, beg, end, token)
       elif token.value == 'curr':
@@ -169,19 +169,19 @@ def GetFactor(tokens):
         ForcePop(tokens, SYMBOL, ')')
         return expression.NumColumnsExpr(token)
       elif token.value == 'at':
-        arg = GetExpression(tokens)
+        arg = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         return expression.AtExpr(arg, token)
       elif token.value == 'index':
-        arg = GetExpression(tokens)
+        arg = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         return expression.IndexExpr(arg, token)
       elif token.value == 'name':
-        arg = GetExpression(tokens)
+        arg = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         return expression.NameExpr(arg, token)
       elif token.value in AGGREGATE_FUNCTIONS:
-        arg = GetExpression(tokens)
+        arg = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
         return expression.AggregateExpr(arg, AGGREGATE_FUNCTIONS[token.value],
                                         token, token.value)
@@ -189,12 +189,14 @@ def GetFactor(tokens):
     elif token.value in KEYWORDS:
       InvalidToken(['Keyword when trying to get factor'], token)
     else:
-      return expression.Variable(token.value, token)
+      if WORDS_AS_CONSTANTS in settings and settings[WORDS_AS_CONSTANTS]:
+        return expression.Constant(token.value, token)
+      return expression.AtExpr(expression.Constant(token.value, token), token)
   elif token.typ == PARAM:
     return expression.ParamExpr(expression.Constant(token.value, token), token)
   elif token.typ == SYMBOL:
     if token.value == '(':
-      expr = GetExpression(tokens)
+      expr = GetExpression(tokens, settings)
       ForcePop(tokens, SYMBOL, ')')
       return expr
     if token.value == '-':
@@ -207,33 +209,33 @@ def GetFactor(tokens):
     return expression.Constant(token.value, token)
   InvalidToken(['Unexpected token when trying to get factor'], token)
 
-def GetProduct(tokens):
-  left = GetFactor(tokens)
+def GetProduct(tokens, settings):
+  left = GetFactor(tokens, settings)
   while tokens and tokens[0].typ == 'symbol' and tokens[0].value in '*/':
     token = ForcePop(tokens)
-    right = GetFactor(tokens)
+    right = GetFactor(tokens, settings)
     if token.value == '*':
       left = expression.Product(left, right, token)
     else:
       left = expression.Quotient(left, right, token)
   return left
 
-def GetSum(tokens):
-  left = GetProduct(tokens)
+def GetSum(tokens, settings):
+  left = GetProduct(tokens, settings)
   while tokens and tokens[0].typ == 'symbol' and tokens[0].value in '+-':
     token = ForcePop(tokens)
-    right = GetProduct(tokens)
+    right = GetProduct(tokens, settings)
     if token.value == '+':
       left = expression.Sum(left, right, token)
     else:
       left = expression.Difference(left, right, token)
   return left
 
-def GetComparison(tokens):
-  left = GetSum(tokens)
+def GetComparison(tokens, settings):
+  left = GetSum(tokens, settings)
   if tokens and tokens[0].typ == 'symbol' and tokens[0].value in '<=>':
     token = ForcePop(tokens)
-    right = GetSum(tokens)
+    right = GetSum(tokens, settings)
     if token.value == '=':
       return expression.Equal(left, right, token)
     elif token.value == '<':
@@ -254,8 +256,21 @@ def GetComparison(tokens):
 # variable = WORD_NOT_KEYWORD
 # number = NUMBER
 # group = ( expr )
-def GetExpression(tokens):
-  return GetComparison(tokens)
+
+# There are two modes of expression getting, depending on how we interpret
+# a free-standing string (a "word" without quotes). In the standard mode, we
+# treat this as a column name reference (and we implement it as an AtExpr). In
+# some contexts, however, mostly where we know there will be no row when
+# interpreting the expression, we will interpret an unquoted word as a string
+# constant, for the convenience of not typing out the quotes.
+#
+# Out of the two ways of implementing this - a global variable or a context
+# passed all along - I chose the latter. I encapsulated this into a settings
+# dict, which right now has one entry: 'words_as_constants', defaulting to
+# False.
+WORDS_AS_CONSTANTS = 'words_as_constants'
+def GetExpression(tokens, settings):
+  return GetComparison(tokens, settings)
 
 #----------------------------------------------------------------------#
 
@@ -271,22 +286,13 @@ def GetOrVar(tokens, allowed_constant_types):
     return command.VariableOrValue(token.value, True, token.line,
                                    token.start, token.end)
 
-def GetQuotedOrVar(tokens):
-  return GetOrVar(tokens, [QUOTED])
-
 def GetWordOrVar(tokens):
   return GetOrVar(tokens, [WORD])
-
-def GetWordOrQuoted(tokens):
-  token = ForcePop(tokens)
-  if token.typ not in [WORD, QUOTED]:
-    InvalidToken(['Expected word or quoted word'], token)
-  return token.value
 
 def GetLoadTable(tokens, line):
   name = ForcePop(tokens, WORD).value
   ForcePop(tokens, WORD, 'FROM')
-  path = GetQuotedOrVar(tokens)
+  path = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   options = {}
   while token := TryPop(tokens, WORD, 'WITH'):
     if token := TryPop(tokens, WORD, 'SEPARATOR'):
@@ -302,31 +308,31 @@ def GetLoadTable(tokens, line):
 def GetDumpTable(tokens, line):
   name = GetWordOrVar(tokens)
   if TryPop(tokens, WORD, 'TO'):
-    path = GetQuotedOrVar(tokens)
+    path = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   else:
-    path = command.Const('stdout')
+    path = expression.Constant('stdout')
   return command.Dump(line, name, path)
 
 def GetImport(tokens, line):
-  path = GetQuotedOrVar(tokens)
-  options = {}
+  path = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  options = {command.PREFIX: expression.Constant('', tokens[0]),
+             command.EXTRA_PARAMS: {},
+             command.EXTRA_TABLES: [],
+             command.PARAM_PREFIX: expression.Constant('', tokens[0])}
   while token := TryPop(tokens, WORD, 'WITH'):
     if TryPop(tokens, WORD, 'PREFIX'):
-      options[command.PREFIX] = GetWordOrQuoted(tokens)
+      prefix = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      options[command.PREFIX] = prefix
     elif TryPop(tokens, WORD, 'PARAM'):
       key = ForcePop(tokens, WORD)
-      val = GetQuotedOrVar(tokens)
-      if command.EXTRA_PARAMS not in options:
-        options[command.EXTRA_PARAMS] = {}
+      val = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
       options[command.EXTRA_PARAMS][key.value] = val
     elif TryPop(tokens, WORD, 'TABLE'):
       table_name = GetWordOrVar(tokens)
-      if command.EXTRA_TABLES not in options:
-        options[command.EXTRA_TABLES] = []
       options[command.EXTRA_TABLES].append(table_name)
     elif TryPop(tokens, WORD, 'PARAM_PREFIX'):
-      prefix = ForcePop(tokens, WORD)
-      options[command.PARAM_PREFIX] = prefix.value
+      prefix = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      options[command.PARAM_PREFIX] = prefix
     else:
       FailedPop(tokens, ['Invalid optional argument to IMPORT'])
   return command.Import(line, path, options, GetCommandList)
@@ -334,7 +340,7 @@ def GetImport(tokens, line):
 def GetExprList(tokens):
   expr_list = []
   while True:
-    expr = GetExpression(tokens)
+    expr = GetExpression(tokens, {})
     asorfor = ForcePop(tokens, WORD)
     if asorfor.value not in ['AS', 'FOR']:
       InvalidToken(['The AS or FOR clause in an expression'], asorfor)
@@ -342,10 +348,10 @@ def GetExprList(tokens):
       columnname = ForcePop(tokens, WORD).value
       expr_list.append(command.SingleExpression(expr, columnname))
     else:
-      range_begin, range_end = GetRange(tokens)
+      range_begin, range_end = GetRange(tokens, {})
       header_expr = expression.CurrNameExpr(asorfor)
       if TryPop(tokens, WORD, 'AS'):
-        header_expr = GetExpression(tokens)
+        header_expr = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
       expr_list.append(command.RangeExpression(
           expr, range_begin, range_end, header_expr))
     if TryPop(tokens, SYMBOL, ',') is None:
@@ -393,7 +399,7 @@ def GetJoin(tokens, line):
   ForcePop(tokens, WORD, 'INTO')
   right_table = GetWordOrVar(tokens)
   ForcePop(tokens, WORD, 'ON')
-  left_expr = GetExpression(tokens)
+  left_expr = GetExpression(tokens, {})
   comparator = None
   if TryPop(tokens, WORD, 'EQ'):
     comparator = 'EQ'
@@ -401,7 +407,7 @@ def GetJoin(tokens, line):
     comparator = 'PREFIX'
   else:
     FailedPop(tokens, ['Invalid comparator'])
-  right_expr = GetExpression(tokens)
+  right_expr = GetExpression(tokens, {})
   unmatched_keys = 'IGNORE'
   unmatched_values = False
   while TryPop(tokens, WORD, 'WITH'):
@@ -425,9 +431,9 @@ def GetJoin(tokens, line):
                       unmatched_values)
 
 def GetAppend(tokens, line):
-  expr_list = [GetExpression(tokens)]
+  expr_list = [GetExpression(tokens, {WORDS_AS_CONSTANTS: True})]
   while TryPop(tokens, SYMBOL, ','):
-    expr_list.append(GetExpression(tokens))
+    expr_list.append(GetExpression(tokens, {WORDS_AS_CONSTANTS: True}))
   ForcePop(tokens, WORD, 'TO')
   table = GetWordOrVar(tokens)
   return command.Append(line, expr_list, table)
@@ -454,7 +460,7 @@ def GetFilter(tokens, line):
   if TryPop(tokens, WORD, 'TO'):
     target = GetWordOrVar(tokens)
   ForcePop(tokens, WORD, 'BY')
-  expr = GetExpression(tokens)
+  expr = GetExpression(tokens, {})
   return command.Filter(line, table, target, expr)
 
 def GetDrop(tokens, line):
@@ -471,8 +477,8 @@ def GetDescribe(tokens, line):
 
 def GetVisualize(tokens, line):
   table = GetWordOrVar(tokens)
-  ForcePop(tokens, WORD, 'TO')
-  outfile = GetQuotedOrVar(tokens)
+  base_token = ForcePop(tokens, WORD, 'TO')
+  outfile = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   base = None
   colours = None
   idname = None
@@ -480,11 +486,13 @@ def GetVisualize(tokens, line):
   lowerBound = None
   higherBound = None
   legend = None
-  title = None
-  header = None
+  title = expression.Constant('', base_token)
+  header = expression.Constant(
+      'Obliczenia i opracowanie mapy:\nMałgorzata i Jakub Onufry Wojtaszczyk',
+      base_token)
   while TryPop(tokens, WORD, 'WITH'):
     if TryPop(tokens, WORD, 'BASE'):
-      base = GetQuotedOrVar(tokens)
+      base = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
     elif TryPop(tokens, WORD, 'COLOURS'):
       colours = ForcePop(tokens, QUOTED).value
     elif TryPop(tokens, WORD, 'ID'):
@@ -498,9 +506,9 @@ def GetVisualize(tokens, line):
       ForcePop(tokens, WORD, 'BOUND')
       higherBound = ForcePop(tokens, NUMBER).value
     elif TryPop(tokens, WORD, 'TITLE'):
-      title = GetQuotedOrVar(tokens)
+      title = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
     elif TryPop(tokens, WORD, 'HEADER'):
-      header = GetQuotedOrVar(tokens)
+      header = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
     elif TryPop(tokens, WORD, 'LEGEND'):
       legend = True
       if TryPop(tokens, WORD, 'NONE'):

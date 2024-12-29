@@ -1,17 +1,5 @@
 Things to do:
 
-Now:
-
-Remove the whole variable resolution weirdness. Right now, Variables
-are generated in three ways:
-1) !?last is generated as the end of header expressions. To fix this, I need
-   one more custom function that gives me the number of columns.
-2) if a simple unquoted word is provided where I expect an expression, it's
-   treated as a variable name.
-3) if a $-prefixed string is provided, I also treat it as a variable.
-
-The number 3 above is part 1.5 below.
-
 Now, part 1.5:
 
 Make it possible to use params in expressions. It's simpler now, as reading

@@ -43,6 +43,17 @@ class VariableOrValue:
               ' '.join(list(params.keys()))))
       return params[self.variable_or_value]
 
+def ParamContext(params):
+  return {'__params': params}
+
+def RowContext(row, header, params):
+  context = ParamContext(params)
+  context['?last'] = len(header) + 1
+  context['__data'] = row
+  for x in header:
+    context[x] = header[x] + 1
+  return context
+
 class Command:
   def __init__(self, line, command):
     self.line = line
@@ -137,7 +148,7 @@ class Load(Command):
 
   def Eval(self, tables, params):
     assert self.name not in tables
-    path = self.path.Eval(params)
+    path = self.path.Eval(ParamContext(params))
     try:
       with open(path, 'r') as inf:
         tables[self.name] = self.ReadLines(inf.readlines())
@@ -163,7 +174,7 @@ class Dump(Command):
   # Dump into a headered SSV file
   def Eval(self, tables, params):
     name = self.Source(self.name, tables, params)
-    path = self.path.Eval(params)
+    path = self.path.Eval(ParamContext(params))
     header, rows = tables[name]
     if path == 'stdout':
       res = []
@@ -220,17 +231,16 @@ class Import(Command):
     super().__init__(line, 'IMPORT')
     self.path = path
     self.parser = parser
-    self.prefix = '' if PREFIX not in options else options[PREFIX]
-    self.extra_params = (
-        {} if EXTRA_PARAMS not in options else options[EXTRA_PARAMS])
-    self.extra_tables = (
-        [] if EXTRA_TABLES not in options else options[EXTRA_TABLES])
-    self.param_prefix = (
-        '' if PARAM_PREFIX not in options else options[PARAM_PREFIX])
+    self.prefix = options[PREFIX]
+    self.extra_params = options[EXTRA_PARAMS]
+    self.extra_tables = options[EXTRA_TABLES]
+    self.param_prefix = options[PARAM_PREFIX]
 
   def Eval(self, tables, params):
     res = []
-    path = self.path.Eval(params)
+    path = self.path.Eval(ParamContext(params))
+    prefix = self.prefix.Eval(ParamContext(params))
+    param_prefix = self.param_prefix.Eval(ParamContext(params))
     # Step one: Parse the relevant file.
     try:
       with open(path, 'r') as config_file:
@@ -244,10 +254,11 @@ class Import(Command):
     child_params = {}
     # TODO: consider an option where we're explicitly not passing params in
     for param in params:
-      if param.startswith(self.param_prefix):
-        child_params[param[len(self.param_prefix):]] = params[param]
+      if param.startswith(param_prefix):
+        child_params[param[len(param_prefix):]] = params[param]
     for param in self.extra_params:
-      child_params[param] = self.extra_params[param].Eval(params)
+      child_params[param] = self.extra_params[param].Eval(
+          ParamContext(params))
     # Step three: prepare to shift directory
     rootpath = os.path.dirname(os.path.abspath(path))
     oldpath = os.getcwd()
@@ -267,7 +278,7 @@ class Import(Command):
       os.chdir(oldpath)
     # Step seven: copy results of child execution into parent tables
     for table in child_tables:
-      new_table_name = self.prefix + table
+      new_table_name = prefix + table
       if new_table_name in tables:
         self.Raise('Cannot import table {}, it already exists'.format(
             new_table_name))
@@ -323,15 +334,6 @@ class RangeExpression:
         raise ValueError(msg.format(header_rev[x], x+1, self.beg+1,
                                     self.end+1, input_row)) from e
       del context['?']
-
-def RowContext(row, header, params):
-  context = {'?last': len(header) + 1,
-             '__data': row,
-             '__params': params
-            }
-  for x in header:
-    context[x] = header[x] + 1
-  return context
 
 class Filter(Command):
   def __init__(self, line, source_table, target_table, expr):
@@ -629,8 +631,7 @@ class Visualize(Command):
     self.idname = idname if idname is not None else Const('id')
     self.dataname = dataname if dataname is not None else Const('data')
     self.legend = legend if legend is not None else True
-    self.header = header if header is not None else Const(
-        'Obliczenia i opracowanie mapy:\nMałgorzata i Jakub Onufry Wojtaszczyk')
+    self.header = header
     self.title = title
     self.lowbound = lowb
     self.highbound = highb
@@ -646,10 +647,10 @@ class Visualize(Command):
     header, rows = tables[self.Source(self.table, tables, params)]
     idcol = self.GetColumnIndex(self.idname, params, header)
     datacol = self.GetColumnIndex(self.dataname, params, header)
-    base = self.base.Eval(params)
-    outfile = self.outfile.Eval(params)
-    map_header = self.header.Eval(params)
-    map_title = self.title.Eval(params)
+    base = self.base.Eval(ParamContext(params))
+    outfile = self.outfile.Eval(ParamContext(params))
+    map_header = self.header.Eval(ParamContext(params))
+    map_title = self.title.Eval(ParamContext(params))
     data = {}
     if self.lowbound is None and self.highbound is not None:
       self.Raise('High bound specified, but low bound is not')

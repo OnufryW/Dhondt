@@ -38,21 +38,16 @@ the foo config in a context with parameters `a`, `b` and `d`.
 
 ## Reading parameters
 
-In general, parameters are accessed by `$PARAMETER_NAME` --- so, for example, a
-parameter named `foo` will be accessed by `$foo`. For now, Cadmium doesn't
-support parameter access in all possible places --- most notably, it is not
-supported within [expressions](expressions.md). Places that do support
-reading parameters are specified in the detailed documentation of every
-command, but two important cases where you should expect parameters to work:
+Parameters are accessed by a dollar sign followed by the parameter name,
+this is substituted by the value of the parameter. Note that this is not
+a macro substitution (so, you can't do things like using the parameter as
+a function name).
 
- - wherever you specify a table name (as a source or target of some operation),
- - wherever you specify a filesystem path (e.g., in a [LOAD](LOAD.md) or
-   [IMPORT](IMPORT.md) command)
-
-In addition, you can use parameters in many places where you specify a column
-outside of the expression context (e.g., when you're specifying the data and id
-columns in [VISUALIZE](VISUALIZE.md).
+You should generally expect to be able to use a parameter name wherever
+you would be able to use a quoted string directly; although there might
+still be a few places left where the implementation is lagging behind the
+specification.
 
 An example of reading a parameter would be:
 
-```IMPORT $data WITH PREFIX data;```
+```IMPORT $data WITH PREFIX $prefix;```
