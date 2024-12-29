@@ -36,7 +36,7 @@ def consumeVariable(s, tokenList, line, curpos):
     pos = 1
     while pos < len(s) and (s[pos].isalnum() or s[pos] == "_"):
       pos += 1
-    tokenList.append(Token(s[1:pos], VARIABLE, line, curpos, curpos+pos))
+    tokenList.append(Token(s[1:pos], PARAM, line, curpos, curpos+pos))
     s = s[pos:]
     return curpos + pos, s
   return curpos, s

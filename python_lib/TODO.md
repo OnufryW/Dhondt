@@ -2,25 +2,15 @@ Things to do:
 
 Now:
 
-Remove all the exclamation mark weirdness.
+Remove the whole variable resolution weirdness. Right now, Variables
+are generated in three ways:
+1) !?last is generated as the end of header expressions. To fix this, I need
+   one more custom function that gives me the number of columns.
+2) if a simple unquoted word is provided where I expect an expression, it's
+   treated as a variable name.
+3) if a $-prefixed string is provided, I also treat it as a variable.
 
-Add three functions:
- * at(X), where X is either an integer (column index), or string
-   (column name), returns the value of the column.
- * index(X), where X is a string denoting a column name, returns the
-   index of that column.
- * name(X), where X is an index, returns the string which is the name of
-   that column.
-
-Additionally, add two more methods:
- * curr(), which returns the value of the currently processed column
- * currname(), which returns the name of the currently processed column
-Note: curr() is a shorthand for value(currname()).
-
-curr() can be only used in column range definition contexts. currname can
-be used in column range definition and column range defintion header.
-
-Now, remove the whole variable resolution weirdness.
+The number 3 above is part 1.5 below.
 
 Now, part 1.5:
 

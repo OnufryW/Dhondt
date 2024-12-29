@@ -17,7 +17,7 @@ WORD = 'word'
 NUMBER = 'number'
 SYMBOL = 'symbol'
 QUOTED = 'quoted'
-VARIABLE = 'variable'
+PARAM = 'variable'
 
 def Symbol(val):
   return Token(val, SYMBOL)

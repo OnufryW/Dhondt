@@ -36,7 +36,7 @@ AGGREGATE_FUNCTIONS = {
   'and': (0, lambda a, b: a + b),
 }
 SPECIAL_FUNCTIONS = {
-  'dhondt', 'at', 'index', 'name', 'curr', 'currname',
+  'dhondt', 'at', 'index', 'name', 'curr', 'currname', 'numcolumns'
 }
 FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys()) + list(RANGE_FUNCTIONS.keys()) + list(AGGREGATE_FUNCTIONS.keys()) + list(SPECIAL_FUNCTIONS)
 KEYWORDS = FUNCTION_NAMES + [
@@ -90,14 +90,14 @@ def GetRange(tokens):
       beg = GetExpression(tokens)
       midtoken = ForcePop(tokens, SYMBOL, ':')
     if TryPop(tokens, SYMBOL, ']'):
-      end = expression.Variable('!?last', midtoken)
+      end = expression.NumColumnsExpr(midtoken)
     else:
       endval = GetExpression(tokens)
       end = expression.If(
           expression.BinaryExpr(
               endval, expression.Constant(0, midtoken), lambda a, b: a < b,
               midtoken, '<'),
-          expression.Variable('!?last', midtoken), endval, midtoken)
+          expression.NumColumnsExpr(midtoken), endval, midtoken)
       ForcePop(tokens, SYMBOL, ']')
     return beg, end
   begtoken = TryPop(tokens, NUMBER)
@@ -111,7 +111,7 @@ def GetRange(tokens):
   endtoken = endtoken if endtoken else midtoken
   end = expression.If(
             expression.Constant(endval < 0, endtoken),
-            expression.Variable('!?last', endtoken),
+            expression.NumColumnsExpr(endtoken),
             expression.Constant(endval, endtoken), endtoken)
   return beg, end
 
@@ -165,6 +165,9 @@ def GetFactor(tokens):
       elif token.value == 'currname':
         ForcePop(tokens, SYMBOL, ')')
         return expression.CurrNameExpr(token)
+      elif token.value == 'numcolumns':
+        ForcePop(tokens, SYMBOL, ')')
+        return expression.NumColumnsExpr(token)
       elif token.value == 'at':
         arg = GetExpression(tokens)
         ForcePop(tokens, SYMBOL, ')')
@@ -187,8 +190,8 @@ def GetFactor(tokens):
       InvalidToken(['Keyword when trying to get factor'], token)
     else:
       return expression.Variable(token.value, token)
-  elif token.typ == VARIABLE:
-    return expression.Variable(token.value, token)
+  elif token.typ == PARAM:
+    return expression.ParamExpr(expression.Constant(token.value, token), token)
   elif token.typ == SYMBOL:
     if token.value == '(':
       expr = GetExpression(tokens)
@@ -258,7 +261,7 @@ def GetExpression(tokens):
 
 def GetOrVar(tokens, allowed_constant_types):
   token = ForcePop(tokens)
-  if token.typ == VARIABLE:
+  if token.typ == PARAM:
     return command.VariableOrValue(token.value, False, token.line,
                                    token.start, token.end)
   else:
@@ -340,7 +343,7 @@ def GetExprList(tokens):
       expr_list.append(command.SingleExpression(expr, columnname))
     else:
       range_begin, range_end = GetRange(tokens)
-      header_expr = expression.Variable('!!?', asorfor)
+      header_expr = expression.CurrNameExpr(asorfor)
       if TryPop(tokens, WORD, 'AS'):
         header_expr = GetExpression(tokens)
       expr_list.append(command.RangeExpression(
@@ -370,7 +373,7 @@ def GetAggregate(tokens, line):
       group_key = None
       if word := TryPop(tokens, WORD):
         group_key = word.value
-      elif var := TryPop(tokens, VARIABLE):
+      elif var := TryPop(tokens, PARAM):
         try:
           group_key = int(var.value)
         except ValueError:

@@ -279,7 +279,7 @@ class SingleExpression:
     self.expr = expr
     self.columnname = columnname
 
-  def AppendHeader(self, new_header, old_header):
+  def AppendHeader(self, new_header, old_header, params):
     assert self.columnname not in new_header
     new_header[self.columnname] = len(new_header)
 
@@ -298,8 +298,8 @@ class RangeExpression:
     self.range_end = range_end
     self.header_expr = header_expr
 
-  def AppendHeader(self, new_header, old_header):
-    context = RowContext(None, old_header)
+  def AppendHeader(self, new_header, old_header, params):
+    context = RowContext(None, old_header, params)
     self.beg = self.range_beg.Eval(context)
     self.end = self.range_end.Eval(context)
     old_header_rev = {}
@@ -322,9 +322,13 @@ class RangeExpression:
         msg = 'Failure evaluating {} (column {} in range {}-{}) for row {}'
         raise ValueError(msg.format(header_rev[x], x+1, self.beg+1,
                                     self.end+1, input_row)) from e
+      del context['?']
 
-def RowContext(row, header):
-  context = {'?last': len(header) + 1, '__data': row}
+def RowContext(row, header, params):
+  context = {'?last': len(header) + 1,
+             '__data': row,
+             '__params': params
+            }
   for x in header:
     context[x] = header[x] + 1
   return context
@@ -346,7 +350,7 @@ class Filter(Command):
         self.Raise('Row {} has length {}, expected {}'.format(row, len(row),
             len(header)))
       try:
-        val = self.expr.Eval(RowContext(row, header))
+        val = self.expr.Eval(RowContext(row, header, params))
         if val:
           new_rows.append(row)
       except Exception as e:
@@ -367,7 +371,7 @@ class Transform(Command):
     header, rows = tables[source_table]
     new_header = {}
     for expr in self.expr_list:
-      expr.AppendHeader(new_header, header)
+      expr.AppendHeader(new_header, header, params)
     new_rows = []
     for row in rows:
       new_row = []
@@ -376,7 +380,7 @@ class Transform(Command):
             row, len(row), len(header)))
       # Construct the expression evaluation context
       for expr in self.expr_list:
-        expr.AppendValues(RowContext(row, header), new_row, header, row)
+        expr.AppendValues(RowContext(row, header, params), new_row, header, row)
       if len(new_row) != len(new_header):
         self.Raise('Calculated row {} has length {}, expected {}'.format(
             new_row, len(new_row), len(new_header)))
@@ -400,7 +404,7 @@ class Aggregate(Command):
     # Define the new header.
     new_header = {}
     for expr in self.expr_list:
-      expr.AppendHeader(new_header, header)
+      expr.AppendHeader(new_header, header, params)
 
     # Accumulate the set of group keys.
     group_keys = set()
@@ -424,13 +428,11 @@ class Aggregate(Command):
     new_rows = []
     for agg_key in groups:
       # Define the evaluation context.
-      context = RowContext(None, header)
+      context = RowContext(None, header, params)
       context['__group_data'] = [{} for _ in groups[agg_key]]
       context['__data'] = {}
-      #context = {'__group_data': [{} for _ in groups[agg_key]], '__data':{}}
       for column in header:
         col_num = header[column]
-        #context[column] = col_num + 1
         if col_num in group_keys:
           context['__data'][col_num] = groups[agg_key][0][col_num]
         else:
@@ -507,10 +509,10 @@ class Join(Command):
     keys = {}
     rows = []
     for row in left_rows:
-      context = RowContext(row, left_header)
+      context = RowContext(row, left_header, params)
       keys[self.left_expr.Eval(context)] = [row, False]
     for row in right_rows:
-      context = RowContext(row, right_header)
+      context = RowContext(row, right_header, params)
       key = self.right_expr.Eval(context)
       rows.append(self.FindRow(keys, key, left_table) + row)
     for row in right_rows:
