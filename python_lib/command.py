@@ -70,7 +70,7 @@ class Command:
         ).with_traceback(e.__traceback__) from None
 
   def Source(self, source, tables, params):
-    source_table = source.Eval(params)
+    source_table = source.Eval(ParamContext(params))
     if source_table not in tables:
       self.Raise('Source table {} not present in tables: {}'.format(
           source_table, tables.keys()))
@@ -79,7 +79,7 @@ class Command:
   def SourceAndTarget(self, source, target, tables, params):
     source_table = self.Source(source, tables, params)
     if target is not None:
-      target_table = target.Eval(params)
+      target_table = target.Eval(ParamContext(params))
       if target_table in tables:
         self.Raise('Target table {} already present in tables!'.format(
             target_table))
@@ -291,8 +291,11 @@ class SingleExpression:
     self.columnname = columnname
 
   def AppendHeader(self, new_header, old_header, params):
-    assert self.columnname not in new_header
-    new_header[self.columnname] = len(new_header)
+    context = RowContext(None, old_header, params)
+    columnname = self.columnname.Eval(context)
+    if columnname in new_header:
+      raise ValueError('Column {} defined twice'.format(columnname))
+    new_header[columnname] = len(new_header)
 
   def AppendValues(self, context, row, header, input_row):
     try:
@@ -499,7 +502,7 @@ class Join(Command):
     left_header, left_rows = tables[left_table]
     right_table = self.Source(self.right_table, tables, params)
     right_header, right_rows = tables[right_table]
-    target_table = self.target_table.Eval(params)
+    target_table = self.target_table.Eval(ParamContext(params))
     if target_table in tables:
       self.Raise('Cannot create table {}, it already exists'.format(
           target_table))
@@ -569,24 +572,26 @@ class Pivot(Command):
   def Eval(self, tables, params):
     source, target = self.SourceAndTarget(
         self.source, self.target, tables, params)
+    old_header, old_rows = tables[source]
     skipped_source_col = None
     header = {}
     rows = []
     # Prepare the new header lambda, and the skipped row.
     if self.headers_from:
-      headers_from = self.headers_from.Eval(params)
-      if headers_from not in tables[source][0]:
+      headers_from = self.headers_from.Eval(
+          RowContext(None, old_header, params))
+      if headers_from not in old_header:
         self.Raise(
           ('Source table {} does not have requested header column {}, ' +
           'present columns are {}').format(
-              source, headers_from, tables[source][0].keys()))
-      header_column_index = tables[source][0][headers_from]
+              source, headers_from, old_header.keys()))
+      header_column_index = old_header[headers_from]
       skipped_source_col = header_column_index
       header_for_row = lambda i, row: row[header_column_index]
     else:
       header_for_row = lambda i, row: 'col_' + str(i+1)
     # Prepare empty new rows (one per old column, potentially minus headers)
-    for _ in tables[source][0]:
+    for _ in old_header:
       rows.append([])
     if skipped_source_col is not None:
       rows.pop()
@@ -601,13 +606,13 @@ class Pivot(Command):
         return source_col - 1
     # Construct the headers column
     if self.headers_to:
-      headers_to = self.headers_to.Eval(params)
+      headers_to = self.headers_to.Eval(RowContext(None, old_header, params))
       header[headers_to] = 0
-      for h in tables[source][0]:
-        if target_row(tables[source][0][h]) is not None:
-          rows[target_row(tables[source][0][h])].append(h)
+      for h in old_header:
+        if target_row(old_header[h]) is not None:
+          rows[target_row(old_header[h])].append(h)
     # Construct the headers and the rest of the rows.
-    for i, row in enumerate(tables[source][1]):
+    for i, row in enumerate(old_rows):
       h = header_for_row(i, row)
       if h in header.keys():
         self.Raise(
@@ -628,8 +633,8 @@ class Visualize(Command):
     self.outfile = outfile
     self.base = base
     self.colours = colours if colours is not None else 'greyscale5'
-    self.idname = idname if idname is not None else Const('id')
-    self.dataname = dataname if dataname is not None else Const('data')
+    self.idname = idname
+    self.dataname = dataname
     self.legend = legend if legend is not None else True
     self.header = header
     self.title = title
@@ -637,7 +642,7 @@ class Visualize(Command):
     self.highbound = highb
 
   def GetColumnIndex(self, var, params, header):
-    name = var.Eval(params)
+    name = var.Eval(ParamContext(params))
     if name not in header:
       self.Raise('Unknown column name {}, column names are {}'.format(
           name, header.keys()))

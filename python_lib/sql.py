@@ -274,21 +274,6 @@ def GetExpression(tokens, settings):
 
 #----------------------------------------------------------------------#
 
-def GetOrVar(tokens, allowed_constant_types):
-  token = ForcePop(tokens)
-  if token.typ == PARAM:
-    return command.VariableOrValue(token.value, False, token.line,
-                                   token.start, token.end)
-  else:
-    if token.typ not in allowed_constant_types:
-      InvalidToken(token, [
-          'GetOrVar token expected types', allowed_constant_types])
-    return command.VariableOrValue(token.value, True, token.line,
-                                   token.start, token.end)
-
-def GetWordOrVar(tokens):
-  return GetOrVar(tokens, [WORD])
-
 def GetLoadTable(tokens, line):
   name = ForcePop(tokens, WORD).value
   ForcePop(tokens, WORD, 'FROM')
@@ -306,11 +291,11 @@ def GetLoadTable(tokens, line):
   return command.Load(line, name, path, options)
 
 def GetDumpTable(tokens, line):
-  name = GetWordOrVar(tokens)
+  name = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   if TryPop(tokens, WORD, 'TO'):
     path = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   else:
-    path = expression.Constant('stdout')
+    path = expression.Constant('stdout', tokens[0])
   return command.Dump(line, name, path)
 
 def GetImport(tokens, line):
@@ -328,7 +313,7 @@ def GetImport(tokens, line):
       val = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
       options[command.EXTRA_PARAMS][key.value] = val
     elif TryPop(tokens, WORD, 'TABLE'):
-      table_name = GetWordOrVar(tokens)
+      table_name = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
       options[command.EXTRA_TABLES].append(table_name)
     elif TryPop(tokens, WORD, 'PARAM_PREFIX'):
       prefix = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
@@ -345,7 +330,7 @@ def GetExprList(tokens):
     if asorfor.value not in ['AS', 'FOR']:
       InvalidToken(['The AS or FOR clause in an expression'], asorfor)
     if asorfor.value == 'AS':
-      columnname = ForcePop(tokens, WORD).value
+      columnname = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
       expr_list.append(command.SingleExpression(expr, columnname))
     else:
       range_begin, range_end = GetRange(tokens, {})
@@ -358,21 +343,19 @@ def GetExprList(tokens):
       return expr_list
 
 def GetTransform(tokens, line):
-  source_table = GetWordOrVar(tokens)
+  source_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  target_table = None
   if TryPop(tokens, WORD, 'TO'):
-    target_table = GetWordOrVar(tokens)
-  else:
-    target_table = None
+    target_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   ForcePop(tokens, WORD, 'WITH')
   expr_list = GetExprList(tokens)
   return command.Transform(line, source_table, target_table, expr_list)
 
 def GetAggregate(tokens, line):
-  source_table = GetWordOrVar(tokens)
+  source_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  target_table = None
   if TryPop(tokens, WORD, 'TO'):
-    target_table = GetWordOrVar(tokens)
-  else:
-    target_table = None
+    target_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   group_list = []
   if TryPop(tokens, WORD, 'BY'):
     while True:
@@ -395,9 +378,9 @@ def GetAggregate(tokens, line):
       line, source_table, target_table, group_list, expr_list)
       
 def GetJoin(tokens, line):
-  left_table = GetWordOrVar(tokens)
+  left_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   ForcePop(tokens, WORD, 'INTO')
-  right_table = GetWordOrVar(tokens)
+  right_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   ForcePop(tokens, WORD, 'ON')
   left_expr = GetExpression(tokens, {})
   comparator = None
@@ -425,7 +408,7 @@ def GetJoin(tokens, line):
       ForcePop(tokens, WORD, 'KEYS')
       unmatched_keys = 'RAISE'
   ForcePop(tokens, WORD, 'AS')
-  target_table = GetWordOrVar(tokens)
+  target_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   return command.Join(line, left_table, right_table, target_table,
                       left_expr, right_expr, comparator, unmatched_keys,
                       unmatched_values)
@@ -435,36 +418,36 @@ def GetAppend(tokens, line):
   while TryPop(tokens, SYMBOL, ','):
     expr_list.append(GetExpression(tokens, {WORDS_AS_CONSTANTS: True}))
   ForcePop(tokens, WORD, 'TO')
-  table = GetWordOrVar(tokens)
+  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   return command.Append(line, expr_list, table)
 
 def GetPivot(tokens, line):
-  table = GetWordOrVar(tokens)
+  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   target = None
   headers_from = None
   headers_to = None
   if TryPop(tokens, WORD, 'TO'):
-    target = GetWordOrVar(tokens)
+    target = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   while TryPop(tokens, WORD, 'WITH'):
     if TryPop(tokens, WORD, 'NEW_HEADERS_FROM'):
-      headers_from = GetWordOrVar(tokens)
+      headers_from = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
     elif TryPop(tokens, WORD, 'OLD_HEADERS_TO'):
-      headers_to = GetWordOrVar(tokens)
+      headers_to = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
     else:
       FailedPop(tokens, ['Option for pivot'])
   return command.Pivot(line, table, target, headers_from, headers_to)
 
 def GetFilter(tokens, line):
-  table = GetWordOrVar(tokens)
+  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   target = None
   if TryPop(tokens, WORD, 'TO'):
-    target = GetWordOrVar(tokens)
+    target = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   ForcePop(tokens, WORD, 'BY')
   expr = GetExpression(tokens, {})
   return command.Filter(line, table, target, expr)
 
 def GetDrop(tokens, line):
-  table = GetWordOrVar(tokens)
+  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   return command.Drop(line, table)
 
 def GetList(tokens, line):
@@ -472,17 +455,17 @@ def GetList(tokens, line):
   return command.List(line)
 
 def GetDescribe(tokens, line):
-  table = GetWordOrVar(tokens)
+  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   return command.Describe(line, table)
 
 def GetVisualize(tokens, line):
-  table = GetWordOrVar(tokens)
+  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   base_token = ForcePop(tokens, WORD, 'TO')
   outfile = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   base = None
   colours = None
-  idname = None
-  dataname = None
+  idname = expression.Constant('id')
+  dataname = expression.Constant('data')
   lowerBound = None
   higherBound = None
   legend = None
@@ -496,9 +479,9 @@ def GetVisualize(tokens, line):
     elif TryPop(tokens, WORD, 'COLOURS'):
       colours = ForcePop(tokens, QUOTED).value
     elif TryPop(tokens, WORD, 'ID'):
-      idname = GetWordOrVar(tokens)
+      idname = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
     elif TryPop(tokens, WORD, 'DATA'):
-      dataname = GetWordOrVar(tokens)
+      dataname = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
     elif TryPop(tokens, WORD, 'LOWER'):
       ForcePop(tokens, WORD, 'BOUND')
       lowerBound = ForcePop(tokens, NUMBER).value
