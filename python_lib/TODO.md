@@ -1,19 +1,5 @@
 Things to do:
 
-Now, part 1.5:
-
-Make it possible to use params in expressions. It's simpler now, as reading
-a param is the only valid use for the dollar sign.
-After that, allow expressions in tons of different places where I do
-QuotedOrVar. In particular, allow expressions in the "AS" part of a column
-definition, which allows me to use things like "name(1)" there.
-And, at this point, finish implementing committee_data/remove_zero_parties.cfg.
-Also, fix the 1:2 hack in sejm_election_results/just_votes.cfg.
-
-After defining this (which should be easy) remove all the exclamation marks
-and the question marks and dollars from all over the place, simplify the
-damn GetValueFromContext, and kill the ReferVariable.
-
 Now, part 2:
 
 Define a "columns touched" method on the expression. For range expressions,
@@ -37,6 +23,24 @@ b) try to read the expression. If it succeeds, then it's the end. If it
 fails to parse, then we should've read nothing. If we read something, then
 throw. If we read nothing (because the first token was not a valid
 expression beginning), then we proceed with the range being "last".
+
+Documentation:
+ * expressions.md
+ * functions.md
+ * ranges.md
+ * LOAD.md
+ * DUMP.md
+ * IMPORT.md
+ * AGGREGATE.md
+ * JOIN.md
+ * APPEND.md
+ * PIVOT.md
+ * DROP.md
+ * VISUALIZE.md
+ * LIST.md
+ * DESCRIBE.md
+ * FILTER.md
+ * Rework README.md, and add a CodeLab.
 
 Sometime:
 
