@@ -19,6 +19,8 @@ BINARY_FUNCTIONS = {
   'end': lambda a, b: a[b:],
   'and': lambda a, b: a and b,
   'or': lambda a, b: a or b,
+  'startswith': lambda a, b: a.startswith(b),
+  'contains': lambda a, b: b in a,
 }
 TERNARY_FUNCTIONS = {
   'if': 'SPECIAL',
@@ -446,6 +448,38 @@ def GetFilter(tokens, line):
   expr = GetExpression(tokens, {})
   return command.Filter(line, table, target, expr)
 
+def GetEmpty(tokens, line):
+  ForcePop(tokens, WORD, 'AS')
+  target = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  return command.Empty(line, target)
+
+def GetUnion(tokens, line):
+  sources = [GetExpression(tokens, {WORDS_AS_CONSTANTS: True})]
+  while TryPop(tokens, SYMBOL, ','):
+    sources.append(GetExpression(tokens, {WORDS_AS_CONSTANTS: True}))
+  ForcePop(tokens, WORD, 'TO')
+  target = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  schema = 'EQUAL'
+  if TryPop(tokens, WORD, 'WITH'):
+    if TryPop(tokens, WORD, 'EQUAL'):
+      ForcePop(tokens, WORD, 'SCHEMA')
+      schema = 'EQUAL'
+    elif TryPop(tokens, WORD, 'REORDERED'):
+      ForcePop(tokens, WORD, 'SCHEMA')
+      schema = 'REORDERED'
+    elif TryPop(tokens, WORD, 'SKIP'):
+      ForcePop(tokens, WORD, 'EXTRA')
+      ForcePop(tokens, WORD, 'COLUMNS')
+      schema = 'INTERSECTION'
+    elif TryPop(tokens, WORD, 'ALL'):
+      ForcePop(tokens, WORD, 'COLUMNS')
+      schema = 'UNION'
+    elif TryPop(tokens, WORD, 'FIRST'):
+      ForcePop(tokens, WORD, 'TABLE')
+      ForcePop(tokens, WORD, 'COLUMNS')
+      schema = 'FIRST'
+  return command.Union(line, sources, target, schema)
+
 def GetDrop(tokens, line):
   table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   return command.Drop(line, table)
@@ -464,8 +498,8 @@ def GetVisualize(tokens, line):
   outfile = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
   base = None
   colours = None
-  idname = expression.Constant('id')
-  dataname = expression.Constant('data')
+  idname = expression.Constant('id', base_token)
+  dataname = expression.Constant('data', base_token)
   lowerBound = None
   higherBound = None
   legend = None
@@ -531,6 +565,10 @@ def GetBody(tokens):
     return GetDescribe(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'FILTER'):
     return GetFilter(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'EMPTY'):
+    return GetEmpty(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'UNION'):
+    return GetUnion(tokens, t.line)
   else:
     FailedPop(tokens, ['Expecting a command keyword.'])
 

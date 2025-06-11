@@ -156,6 +156,85 @@ class Load(Command):
       self.RaiseFrom('Failed to read from {}'.format(path), e)
     return []
 
+
+class Empty(Command):
+  def __init__(self, line, target):
+    super().__init__(line, 'EMPTY')
+    self.target = target
+
+  def Eval(self, tables, params):
+    target = self.target.Eval(ParamContext(params))
+    if target in tables:
+      self.Raise('Target table {} already present in tables!'.format(target))
+    tables[target] = ({}, [])
+    return []
+
+
+class Union(Command):
+  def __init__(self, line, sources, target, schema):
+    super().__init__(line, 'UNION')
+    self.sources = sources
+    self.target = target
+    self.schema = schema
+    assert schema in ('EQUAL', 'REORDERED', 'INTERSECTION', 'UNION', 'FIRST')
+
+  def ValidateHeadersMatch(self, tables, sources, checkposition):
+    missing_key_msg = (
+"""Cannot union {} and {}, headers do not match. {} contains column {}, while {} doesn't.""")
+    key_position_msg = (
+"""Cannot union {} and {}, headers do not match. In {}, {} is column {}, while in {} it's column {}.""")
+    for index in range(len(sources)):
+      for a, b in [(sources[0], sources[index]), (sources[index], sources[0])]:
+        for key in tables[a][0]:
+          if key not in tables[b][0]:
+            self.Raise(missing_key_msg.format(a, b, a, key, b))
+          if checkposition and tables[a][0][key] != tables[b][0][key]:
+            self.Raise(key_position_msg.format(
+                a, b, a, key, tables[a][0][key], b, tables[b][0][key]))
+
+  def IntersectSchema(self, target, source):
+    for key in list(target.keys()):
+      if key not in source:
+        del target[key]
+    keypairs = [(target[key], key) for key in target]
+    sort(keypairs)
+    for i, (_, key) in enumerate(keypairs):
+      target[key] = i
+
+  def UnionSchema(self, target, source):
+    keypairs = [(source[key], key) for key in source]
+    keypairs.sort()
+    for _, key in keypairs:
+      if key not in target:
+        target[key] = len(target)
+
+  def TransformRow(self, row, sourceschema, targetschema):
+    result = [''] * len(targetschema)
+    for key in sourceschema:
+      if key in targetschema:
+        result[targetschema[key]] = row[sourceschema[key]]
+    return result
+
+  def Eval(self, tables, params):
+    sources = [self.Source(x, tables, params) for x in self.sources]
+    targetschema = tables[sources[0]][0].copy()
+    if self.schema in ('EQUAL', 'REORDERED'):
+      self.ValidateHeadersMatch(tables, sources, self.schema == 'EQUAL')
+    for source in sources:
+      if self.schema == 'INTERSECTION':
+        self.IntersectSchema(targetschema, tables[source][0])
+      elif self.schema == 'UNION':
+        self.UnionSchema(targetschema, tables[source][0])
+    target = self.target.Eval(ParamContext(params))
+    if target in tables and target not in sources:
+      self.Raise('Target table {} already present in tables!'.format(target))
+    new_rows = []
+    for source in sources:
+      for row in tables[source][1]:
+        new_rows.append(self.TransformRow(row, tables[source][0], targetschema))
+    tables[target] = (targetschema, new_rows)
+    return []
+
 class Dump(Command):
   def __init__(self, line, name, path, options={}):
     super().__init__(line, 'DUMP')
@@ -303,7 +382,7 @@ class SingleExpression:
     except Exception as e:
       msg = 'Failure evaluating {} (column {}) for row {}: {}'
       raise ValueError(msg.format(
-          self.columnname, len(row) + 1, input_row, str(e))) from e
+          self.columnname.Eval(context), len(row) + 1, input_row, str(e))) from e
 
 class RangeExpression:
   def __init__(self, expr, range_beg, range_end, header_expr):

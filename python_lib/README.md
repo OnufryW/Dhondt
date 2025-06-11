@@ -1,5 +1,7 @@
 # Composable data manipulation language (Cadmium).
 
+This is an introduction to Cadmium. If you're looking for a reference, it's [here](reference.md)
+
 Cadmium allows the processing of tabular data, and dumping it into semicolon-separated tables, or into maps (bitmaps).
 
 Cadmium processes series of commands. These commands can be put into a config file and executed,
@@ -19,6 +21,8 @@ The words `LOAD` and `FROM` are keywords. `table` is the name of the table you'r
 This particular table happens to contain the committees that ran in the 2015 parliamentary elections in Poland, and what was the percentage threshold of votes they had to get to put any MPs into the Sejm. The threshold, in practice, depends on whether the committee was a coalition (with an 8% threshold), a single party (a 5% threshold), or a minoriy committee (0% threshold). 
 
 Cadmium expects a semicolon-separated file, where the each line except the first contains one row of data, and the first line contains the header (that is, the names of the individual columns). Load will fail if this is not satisified. All the data is loaded as strings. Empty rows or rows beginning with a hash sign (`#`) are ignored.
+
+The full documentation is [here](LOAD.md), see also the [EMPTY](EMPTY.md) command. 
 
  ## Printing data / DUMP
 
