@@ -1,0 +1,7 @@
+party;seats
+PrawoISprawiedliwość;235
+PlatformaObywatelska;138
+PolskieStronnictwoLudowe;16
+Kukiz15;42
+Nowoczesna;28
+MniejszośćNiemiecka;1

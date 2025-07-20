@@ -1,42 +1,102 @@
 # This is an in-memory kinda SQL interpreter.
 import math
+import random
 
 import tokenizer
 import expression
 import command
 from tokens import *
 
+# Types:
+BOOL = 'bool'
+INT = 'integer'
+FLOAT = 'real number'
+STRING = 'string'
+
+ANY = [BOOL, INT, FLOAT, STRING]
+
+BOOL_1 = lambda a : BOOL
+INT_1 = lambda a : INT
+FLOAT_1 = lambda a : FLOAT
+MIRROR_1 = lambda a : a
+
+STRING_2 = lambda a, b: STRING
+BOOL_2 = lambda a, b: BOOL
+
+STRING_3 = lambda a, b, c: STRING
+
+NUMERIC = lambda a, b: INT if a == INT and b == INT else FLOAT
+
+def assert_and_return(x):
+  assert(x)
+  return x
+
 UNARY_FUNCTIONS = {
-  'sqrt': lambda a: math.sqrt(a),
-  'int': lambda a: int(a),
-  'len': lambda a: len(a),
-  'not': lambda a: not a,
-  'abs': lambda a: abs(a)
+  'sqrt': (lambda a: math.sqrt(a), [INT, FLOAT], FLOAT_1),
+  'int': (lambda a: int(a), [INT, FLOAT, STRING], INT_1),
+  'len': (lambda a: len(a), [STRING], INT_1),
+  'not': (lambda a: not a, [BOOL], BOOL_1),
+  'abs': (lambda a: abs(a), [INT, FLOAT], MIRROR_1),
+  'assert': (assert_and_return, [BOOL], BOOL_1)
 }
 BINARY_FUNCTIONS = {
-  'min': lambda a, b: min(a,b),
-  'beginning': lambda a, b: a[:b],
-  'end': lambda a, b: a[b:],
-  'and': lambda a, b: a and b,
-  'or': lambda a, b: a or b,
-  'startswith': lambda a, b: a.startswith(b),
-  'contains': lambda a, b: b in a,
+  'min': (lambda a, b: min(a,b), [INT, FLOAT], [INT, FLOAT], NUMERIC),
+  'beginning': (lambda a, b: a[:b], [STRING], [INT], STRING_2),
+  'end': (lambda a, b: a[b:], [STRING], [INT], STRING_2),
+  'and': (lambda a, b: a and b, [BOOL], [BOOL], BOOL_2),
+  'or': (lambda a, b: a or b, [BOOL], [BOOL], BOOL_2),
+  'startswith': (lambda a, b: a.startswith(b), [STRING], [STRING], BOOL_2),
+  'contains': (lambda a, b: b in a, [STRING], [STRING], BOOL_2)
 }
 TERNARY_FUNCTIONS = {
-  'if': 'SPECIAL',
-  'substr': lambda a, b, c: a[b:c],
-  'replace': lambda a, b, c: a.replace(b, c),
+  'if': ('SPECIAL', [BOOL], ANY, ANY, lambda a, b, c: b),
+  'substr': (lambda a, b, c: a[b:c], [STRING], [INT], [INT], STRING_3),
+  'replace': (lambda a, b, c: a.replace(b, c), [STRING], [STRING], [STRING],
+              STRING_3)
 }
+# For now, since the range functions are applied straight to columns, the
+# allowed input types are ignored.
 RANGE_FUNCTIONS = {
-  'concat_range': ('', lambda a, b: a + b),
-  'sum_range': (0, lambda a, b: a + b),
-  'and_range': (True, lambda a, b: a and b),
+  'concat_range': ('', lambda a, b: a + b, [STRING], [STRING]),
+  'sum_range': (0, lambda a, b: a + b, [INT, FLOAT], [INT, FLOAT]),
+  'and_range': (True, lambda a, b: a and b, [BOOL], [BOOL]),
 }
 AGGREGATE_FUNCTIONS = {
-  'sum': (0, lambda a, b: a + b),
-  'max': (None, lambda a, b: b if a is None else max(a,b)),
-  'and': (0, lambda a, b: a + b),
+  'sum': (0, lambda a, b: a + b, [INT, FLOAT], MIRROR_1),
+  'max': (None, lambda a, b: b if a is None else max(a,b), 
+          [INT, FLOAT, STRING], MIRROR_1),
+  'and': (0, lambda a, b: a + b, [BOOL], MIRROR_1),
 }
+
+# Calculates the possible output types of a function.
+# Say the function has k arguments. Then intypes is a list of length k,
+# the i-th element is a list of accepted types of the i-th argument.
+# Argtypes is also a list, and the i-th element is the list of possible
+# types of the i-th argument. And f is a function that takes k types, and
+# returns the output type if the arguments are of those types.
+def CalcTypesGeneric(intypes, argtypes, f):
+  assert(len(intypes) == len(argtypes))
+  if len(intypes) == 0:
+    return [f()]
+  res = set()
+  for t in intypes[0]:
+    if t in argtypes[0]:
+      def prepacked_f(*args):
+        return f(*(tuple([t] + list(args))))
+      res.update(CalcTypesGeneric(intypes[1:], argtypes[1:], prepacked_f))
+  return list(res)
+
+def CalcType1(intypes, argtypes, f):
+  return CalcTypesGeneric([intypes], [argtypes], f)
+
+def CalcType2(intypes1, argtypes1, intypes2, argtypes2, f):
+  return CalcTypesGeneric([intypes1, intypes2], [argtypes1, argtypes2], f)
+
+def CalcType3(intypes1, argtypes1, intypes2, argtypes2, intypes3,
+              argtypes3, f):
+  return CalcTypesGeneric(
+      [intypes1, intypes2, intypes3], [argtypes1, argtypes2, argtypes3], f)
+
 SPECIAL_FUNCTIONS = {
   'dhondt', 'at', 'index', 'name', 'curr', 'currname', 'numcolumns'
 }
@@ -80,9 +140,9 @@ def GetNumber(token):
   if token.typ != NUMBER:
     InvalidToken(['Unexpected token type when trying to parse number'], token)
   if token.value.find('.') == -1:
-    return expression.Constant(int(token.value), token)
+    return (expression.Constant(int(token.value), token), [INT])
   else:
-    return expression.Constant(float(token.value), token)
+    return (expression.Constant(float(token.value), token), [FLOAT])
 
 def GetRange(tokens, settings):
   if rangetoken := TryPop(tokens, SYMBOL, '['):
@@ -125,34 +185,41 @@ def GetFactor(tokens, settings):
     if token.value in FUNCTION_NAMES:
       ForcePop(tokens, SYMBOL, '(')
       if token.value in UNARY_FUNCTIONS:
-        arg = GetExpression(tokens, settings)
+        arg = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.UnaryExpr(
-            arg, UNARY_FUNCTIONS[token.value], token, token.value)
+        f = UNARY_FUNCTIONS[token.value]
+        typ = CalcType1(f[1], arg[1], f[2])
+        return (expression.UnaryExpr(arg[0], f[0], token, token.value), typ)
       elif token.value in BINARY_FUNCTIONS:
-        arg1 = GetExpression(tokens, settings)
+        arg1 = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
-        arg2 = GetExpression(tokens, settings)
+        arg2 = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.BinaryExpr(
-            arg1, arg2, BINARY_FUNCTIONS[token.value], token, token.value)
+        f = BINARY_FUNCTIONS[token.value]
+        typ = CalcType2(f[1], arg1[1], f[2], arg2[1], f[3])
+        return (expression.BinaryExpr(
+            arg1[0], arg2[0], f[0], token, token.value), typ)
       elif token.value in TERNARY_FUNCTIONS:
-        arg1 = GetExpression(tokens, settings)
+        arg1 = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
-        arg2 = GetExpression(tokens, settings)
+        arg2 = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
-        arg3 = GetExpression(tokens, settings)
+        arg3 = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
+        f = TERNARY_FUNCTIONS[token.value]
+        typ = CalcType3(f[1], arg1[1], f[2], arg2[1], f[3], arg3[1], f[4])
         if token.value == 'if':
-          return expression.If(arg1, arg2, arg3, token)
-        return expression.TernaryExpr(
-            arg1, arg2, arg3, TERNARY_FUNCTIONS[token.value], token,
-            token.value)
+          res = expression.If(arg1[0], arg2[0], arg3[0], token)
+        else:
+          res = expression.TernaryExpr(
+              arg1[0], arg2[0], arg3[0], f[0], token, token.value)
+        return (res, typ)
       elif token.value in RANGE_FUNCTIONS:
         beg, end = GetRange(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.RangeExpr(beg, end, RANGE_FUNCTIONS[token.value],
-                                    token, token.value)
+        f = RANGE_FUNCTIONS[token.value]
+        return (expression.RangeExpr(
+                    beg, end, (f[0], f[1]), token, token.value), f[3])
       elif token.value == 'dhondt':
         seats = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
@@ -160,91 +227,128 @@ def GetFactor(tokens, settings):
         ForcePop(tokens, SYMBOL, ',')
         beg, end = GetRange(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.DhondtExpr(seats, votes, beg, end, token)
+        return (expression.DhondtExpr(seats, votes, beg, end, token), 
+                [INT])
       elif token.value == 'curr':
         ForcePop(tokens, SYMBOL, ')')
-        return expression.CurrExpr(token)
+        return (expression.CurrExpr(token), ANY)
       elif token.value == 'currname':
         ForcePop(tokens, SYMBOL, ')')
-        return expression.CurrNameExpr(token)
+        return (expression.CurrNameExpr(token), [STRING])
       elif token.value == 'numcolumns':
         ForcePop(tokens, SYMBOL, ')')
-        return expression.NumColumnsExpr(token)
+        return (expression.NumColumnsExpr(token), [INT])
       elif token.value == 'at':
-        arg = GetExpression(tokens, settings)
+        arg = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.AtExpr(arg, token)
+        return (expression.AtExpr(arg[0], token), ANY)
       elif token.value == 'index':
-        arg = GetExpression(tokens, settings)
+        arg = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.IndexExpr(arg, token)
+        return (expression.IndexExpr(arg[0], token), [INT])
       elif token.value == 'name':
-        arg = GetExpression(tokens, settings)
+        arg = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.NameExpr(arg, token)
+        return (expression.NameExpr(arg[0], token), [STRING])
       elif token.value in AGGREGATE_FUNCTIONS:
-        arg = GetExpression(tokens, settings)
+        arg = GetExpressionFull(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return expression.AggregateExpr(arg, AGGREGATE_FUNCTIONS[token.value],
-                                        token, token.value)
+        f = AGGREGATE_FUNCTIONS[token.value]
+        typ = CalcType1(f[2], arg[1], f[3])
+        return (expression.AggregateExpr(arg[0], (f[0], f[1]), token, token.value), typ)
       InvalidToken(['Weird function name when trying to get factor'], token)
     elif token.value in KEYWORDS:
       InvalidToken(['Keyword when trying to get factor'], token)
     else:
-      if WORDS_AS_CONSTANTS in settings and settings[WORDS_AS_CONSTANTS]:
-        return expression.Constant(token.value, token)
-      return expression.AtExpr(expression.Constant(token.value, token), token)
+      if settings[WORDS_AS_CONSTANTS]:
+        return (expression.Constant(token.value, token), [STRING])
+      return (expression.AtExpr(expression.Constant(token.value, token),
+                  token), ANY)
   elif token.typ == PARAM:
-    return expression.ParamExpr(expression.Constant(token.value, token), token)
+    return (expression.ParamExpr(expression.Constant(token.value, token),
+            token), [STRING])
   elif token.typ == SYMBOL:
     if token.value == '(':
-      expr = GetExpression(tokens, settings)
+      expr = GetExpressionFull(tokens, settings)
       ForcePop(tokens, SYMBOL, ')')
       return expr
     if token.value == '-':
       number_token = ForcePop(tokens, NUMBER)
       number = GetNumber(number_token)
-      number.val = -number.val
+      number[0].val = -number[0].val
       return number
     InvalidToken(['Unexpected symbol when trying to get factor'], token)
   elif token.typ == QUOTED:
-    return expression.Constant(token.value, token)
+    return (expression.Constant(token.value, token), [STRING])
   InvalidToken(['Unexpected token when trying to get factor'], token)
 
 def GetProduct(tokens, settings):
-  left = GetFactor(tokens, settings)
+  expr, typ = GetFactor(tokens, expect(settings, ANY))
+  if INT not in typ and FLOAT not in typ:
+    return (expr, typ)
   while tokens and tokens[0].typ == 'symbol' and tokens[0].value in '*/':
+    typ = [t for t in typ if t == INT or t == FLOAT]
     token = ForcePop(tokens)
-    right = GetFactor(tokens, settings)
-    if token.value == '*':
-      left = expression.Product(left, right, token)
+    rexpr, rtyp = GetFactor(tokens, settings)
+    if INT not in rtyp and FLOAT not in rtyp:
+      InvalidToken(['Can only divide and multiply numbers'], token)
+    if FLOAT not in typ and FLOAT not in rtyp:
+      typ = [INT]
+    elif INT not in typ and FLOAT not in rtyp:
+      typ = [FLOAT]
     else:
-      left = expression.Quotient(left, right, token)
-  return left
+      typ = [INT, FLOAT]
+    if token.value == '*':
+      expr = expression.Product(expr, rexpr, token)
+    else:
+      expr = expression.Quotient(expr, rexpr, token)
+  return (expr, typ)
 
 def GetSum(tokens, settings):
-  left = GetProduct(tokens, settings)
+  expr, typ = GetProduct(tokens, expect(settings, ANY))
+  typ = [t for t in typ if t in settings[EXPECTED_TYPES]]
+  if INT not in typ and FLOAT not in typ and STRING not in typ:
+    return (expr, typ)
   while tokens and tokens[0].typ == 'symbol' and tokens[0].value in '+-':
+    typ = [t for t in typ for t in [INT, FLOAT, STRING]]
     token = ForcePop(tokens)
-    right = GetProduct(tokens, settings)
+    rexpr, rtyp = GetProduct(tokens, settings)
+    ftyp = []
+    if STRING in typ and STRING in rtyp and token.value == '+':
+      ftyp.append(STRING)
+    if INT in typ and INT in rtyp:
+      ftyp.append(INT)
+    if ((FLOAT in typ and (FLOAT in rtyp or INT in rtyp)) or
+        (FLOAT in rtyp and (FLOAT in typ or INT in typ))):
+      ftyp.append(FLOAT)
+    if not ftyp:
+      InvalidToken(['Can only add strings or numbers'], token)
+    typ = ftyp
     if token.value == '+':
-      left = expression.Sum(left, right, token)
+      expr = expression.Sum(expr, rexpr, token)
     else:
-      left = expression.Difference(left, right, token)
-  return left
+      expr = expression.Difference(expr, rexpr, token)
+  return (expr, typ)
 
 def GetComparison(tokens, settings):
-  left = GetSum(tokens, settings)
-  if tokens and tokens[0].typ == 'symbol' and tokens[0].value in '<=>':
+  expr, typ = GetSum(tokens, expect(settings, ANY))
+  if (tokens and tokens[0].typ == 'symbol' and tokens[0].value in '<=>' and
+      BOOL in settings[EXPECTED_TYPES]):
     token = ForcePop(tokens)
-    right = GetSum(tokens, settings)
+    # TODO: I could do more string checks here; I don't accept any types.
+    rexpr, _ = GetSum(tokens, expect(settings, ANY))
     if token.value == '=':
-      return expression.Equal(left, right, token)
+      return (expression.Equal(expr, rexpr, token), [BOOL])
     elif token.value == '<':
-      return expression.Lesser(left, right, token)
+      return (expression.Lesser(expr, rexpr, token), [BOOL])
     else:
-      return expression.Greater(left, right, token)
-  return left
+      return (expression.Greater(expr, rexpr, token), [BOOL])
+  return (expr, typ)
+
+def GetExpressionFull(tokens, settings):
+  token = tokens[0]
+  res, typ = GetComparison(tokens, settings)
+  return (res, typ)
 
 # Expression grammar
 # expr = comparison
@@ -271,15 +375,46 @@ def GetComparison(tokens, settings):
 # dict, which right now has one entry: 'words_as_constants', defaulting to
 # False.
 WORDS_AS_CONSTANTS = 'words_as_constants'
+EXPECTED_TYPES = 'expected_types'
+
+def lcompatible(typ):
+  res = typ[:]
+  if INT in typ and FLOAT not in typ:
+    res.append(FLOAT)
+  if FLOAT in typ and INT not in typ:
+    res.append(INT)
+  return res
+
+def compatible(typ):
+  if typ == INT or typ == FLOAT: return [INT, FLOAT]
+  return [typ]
+
+def expect(settings, expected_types):
+  return {WORDS_AS_CONSTANTS: settings[WORDS_AS_CONSTANTS],
+          EXPECTED_TYPES: expected_types}
+
 def GetExpression(tokens, settings):
-  return GetComparison(tokens, settings)
+  token = tokens[0]
+  if EXPECTED_TYPES not in settings:
+    settings[EXPECTED_TYPES] = ANY
+  if WORDS_AS_CONSTANTS not in settings:
+    settings[WORDS_AS_CONSTANTS] = False
+  expr, typ = GetExpressionFull(tokens, settings)
+  accepted_typ = [t for t in typ if t in settings[EXPECTED_TYPES]]
+  if not accepted_typ:
+    raise InvalidToken([
+        'Type mismatch, expected one of {}, got one of {}'.format(
+            settings[EXPECTED_TYPES], typ)], token)
+  return expr
 
 #----------------------------------------------------------------------#
+QUOTED_STRING = {WORDS_AS_CONSTANTS: False, EXPECTED_TYPES: [STRING]}
+UNQUOTED_STRING = {WORDS_AS_CONSTANTS: True, EXPECTED_TYPES: [STRING]}
 
 def GetLoadTable(tokens, line):
   name = ForcePop(tokens, WORD).value
   ForcePop(tokens, WORD, 'FROM')
-  path = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  path = GetExpression(tokens, UNQUOTED_STRING)
   options = {}
   while token := TryPop(tokens, WORD, 'WITH'):
     if token := TryPop(tokens, WORD, 'SEPARATOR'):
@@ -293,32 +428,104 @@ def GetLoadTable(tokens, line):
   return command.Load(line, name, path, options)
 
 def GetDumpTable(tokens, line):
-  name = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  name = GetExpression(tokens, UNQUOTED_STRING)
   if TryPop(tokens, WORD, 'TO'):
-    path = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+    path = GetExpression(tokens, UNQUOTED_STRING)
   else:
     path = expression.Constant('stdout', tokens[0])
   return command.Dump(line, name, path)
 
+def GetRunSource(tokens):
+  line = tokens[0].line
+  if TryPop(tokens, WORD, 'FILE'):
+    return ('FILE', GetExpression(tokens, QUOTED_STRING), line)
+  elif TryPop(tokens, WORD, 'COMMAND'):
+    return ('COMMAND', GetExpression(tokens, QUOTED_STRING), line)
+  else:
+    return ('TABLE', GetExpression(tokens, UNQUOTED_STRING), line)
+
+def GetRun(tokens, line):
+  runnables = []
+  random_names = []
+  while True:
+    source = GetRunSource(tokens)
+    runnable = {'INPUT': source, 'FROM': [], 'INTO': None, 'PARAMS': {},
+                'PARAM_PREFIX': expression.Constant('', tokens[0]),
+                'LINE': tokens[0].line}
+    param_prefix_set = False
+    while True:
+      if token := TryPop(tokens, WORD, 'FROM'):
+        if runnable['FROM']:
+          FailedPop(tokens, 'A RUN clause has multiple FROM clauses')
+        inputs = []
+        while True:
+          inputs.append(GetRunSource(tokens))
+          if not TryPop(tokens, SYMBOL, ','):
+            break
+        runnable['FROM'] = inputs
+        continue
+      elif token := TryPop(tokens, WORD, 'INTO'):
+        if runnable['INTO']:
+          FailedPop(tokens, 'A RUN clause has multiple INTO clauses')
+        runnable['INTO'] = GetExpression(tokens, UNQUOTED_STRING)
+        continue
+      elif token := TryPop(tokens, WORD, 'WITH'):
+        if token := TryPop(tokens, WORD, 'PARAM'):
+          key = ForcePop(tokens, WORD)
+          if key in runnable['PARAMS']:
+            FailedPop(tokens,
+                'Parameter {} defined twice in RUN clause'.format(key))
+          val = GetExpression(tokens, UNQUOTED_STRING)
+          runnable['PARAMS'][key] = val
+        elif token := TryPop(tokens, WORD, 'PARAM_PREFIX'):
+          if param_prefix_set:
+            FailedPop(tokens,
+                      'Parameter prefix defined twice in run clause')
+          param_prefix_set = True
+          runnable['PARAM_PREFIX'] = GetExpression(tokens, UNQUOTED_STRING)
+        else:
+          FailedPop(tokens, ['Invalid optional argument to RUN'])
+      break
+    if runnables:
+      random_name = '__input_table_' + ''.join([
+          random.choice('0123456789') for _ in range(6)])
+      if runnables[-1]['INTO']:
+        FailedPop(tokens, 
+            'Only the last entry in a RUN stream can have an INTO clause')
+      if runnable['FROM']:
+        FailedPop(tokens,
+            'Only the first entry in a RUN stream can have a FROM clause')
+      runnables[-1]['INTO'] = expression.Constant(random_name, tokens[0])
+      runnable['FROM'].append(
+          ('TABLE', expression.Constant(random_name, tokens[0]),
+           runnable['LINE']))
+      random_names.append(random_name)
+    runnables.append(runnable)
+    if TryPop(tokens, SYMBOL, '>'):
+      continue
+    break
+  return command.Run(line, runnables, random_names, GetCommandList)
+
 def GetImport(tokens, line):
-  path = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  path = GetExpression(tokens, UNQUOTED_STRING)
   options = {command.PREFIX: expression.Constant('', tokens[0]),
              command.EXTRA_PARAMS: {},
              command.EXTRA_TABLES: [],
-             command.PARAM_PREFIX: expression.Constant('', tokens[0])}
+             command.PARAM_PREFIX: expression.Constant('', tokens[0]),
+             command.TARGET_TABLE: None}
   while token := TryPop(tokens, WORD, 'WITH'):
     if TryPop(tokens, WORD, 'PREFIX'):
-      prefix = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      prefix = GetExpression(tokens, UNQUOTED_STRING)
       options[command.PREFIX] = prefix
     elif TryPop(tokens, WORD, 'PARAM'):
       key = ForcePop(tokens, WORD)
-      val = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      val = GetExpression(tokens, UNQUOTED_STRING)
       options[command.EXTRA_PARAMS][key.value] = val
     elif TryPop(tokens, WORD, 'TABLE'):
-      table_name = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      table_name = GetExpression(tokens, UNQUOTED_STRING)
       options[command.EXTRA_TABLES].append(table_name)
     elif TryPop(tokens, WORD, 'PARAM_PREFIX'):
-      prefix = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      prefix = GetExpression(tokens, UNQUOTED_STRING)
       options[command.PARAM_PREFIX] = prefix
     else:
       FailedPop(tokens, ['Invalid optional argument to IMPORT'])
@@ -332,32 +539,32 @@ def GetExprList(tokens):
     if asorfor.value not in ['AS', 'FOR']:
       InvalidToken(['The AS or FOR clause in an expression'], asorfor)
     if asorfor.value == 'AS':
-      columnname = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      columnname = GetExpression(tokens, UNQUOTED_STRING)
       expr_list.append(command.SingleExpression(expr, columnname))
     else:
       range_begin, range_end = GetRange(tokens, {})
       header_expr = expression.CurrNameExpr(asorfor)
       if TryPop(tokens, WORD, 'AS'):
-        header_expr = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+        header_expr = GetExpression(tokens, UNQUOTED_STRING)
       expr_list.append(command.RangeExpression(
           expr, range_begin, range_end, header_expr))
     if TryPop(tokens, SYMBOL, ',') is None:
       return expr_list
 
 def GetTransform(tokens, line):
-  source_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  source_table = GetExpression(tokens, UNQUOTED_STRING)
   target_table = None
   if TryPop(tokens, WORD, 'TO'):
-    target_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+    target_table = GetExpression(tokens, UNQUOTED_STRING)
   ForcePop(tokens, WORD, 'WITH')
   expr_list = GetExprList(tokens)
   return command.Transform(line, source_table, target_table, expr_list)
 
 def GetAggregate(tokens, line):
-  source_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  source_table = GetExpression(tokens, UNQUOTED_STRING)
   target_table = None
   if TryPop(tokens, WORD, 'TO'):
-    target_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+    target_table = GetExpression(tokens, UNQUOTED_STRING)
   group_list = []
   if TryPop(tokens, WORD, 'BY'):
     while True:
@@ -380,9 +587,9 @@ def GetAggregate(tokens, line):
       line, source_table, target_table, group_list, expr_list)
       
 def GetJoin(tokens, line):
-  left_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  left_table = GetExpression(tokens, UNQUOTED_STRING)
   ForcePop(tokens, WORD, 'INTO')
-  right_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  right_table = GetExpression(tokens, UNQUOTED_STRING)
   ForcePop(tokens, WORD, 'ON')
   left_expr = GetExpression(tokens, {})
   comparator = None
@@ -410,55 +617,55 @@ def GetJoin(tokens, line):
       ForcePop(tokens, WORD, 'KEYS')
       unmatched_keys = 'RAISE'
   ForcePop(tokens, WORD, 'AS')
-  target_table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  target_table = GetExpression(tokens, UNQUOTED_STRING)
   return command.Join(line, left_table, right_table, target_table,
                       left_expr, right_expr, comparator, unmatched_keys,
                       unmatched_values)
 
 def GetAppend(tokens, line):
-  expr_list = [GetExpression(tokens, {WORDS_AS_CONSTANTS: True})]
+  expr_list = [GetExpression(tokens, {})]
   while TryPop(tokens, SYMBOL, ','):
-    expr_list.append(GetExpression(tokens, {WORDS_AS_CONSTANTS: True}))
+    expr_list.append(GetExpression(tokens, {}))
   ForcePop(tokens, WORD, 'TO')
-  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  table = GetExpression(tokens, UNQUOTED_STRING)
   return command.Append(line, expr_list, table)
 
 def GetPivot(tokens, line):
-  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  table = GetExpression(tokens, UNQUOTED_STRING)
   target = None
   headers_from = None
   headers_to = None
   if TryPop(tokens, WORD, 'TO'):
-    target = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+    target = GetExpression(tokens, UNQUOTED_STRING)
   while TryPop(tokens, WORD, 'WITH'):
     if TryPop(tokens, WORD, 'NEW_HEADERS_FROM'):
-      headers_from = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      headers_from = GetExpression(tokens, UNQUOTED_STRING)
     elif TryPop(tokens, WORD, 'OLD_HEADERS_TO'):
-      headers_to = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      headers_to = GetExpression(tokens, UNQUOTED_STRING)
     else:
       FailedPop(tokens, ['Option for pivot'])
   return command.Pivot(line, table, target, headers_from, headers_to)
 
 def GetFilter(tokens, line):
-  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  table = GetExpression(tokens, UNQUOTED_STRING)
   target = None
   if TryPop(tokens, WORD, 'TO'):
-    target = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+    target = GetExpression(tokens, UNQUOTED_STRING)
   ForcePop(tokens, WORD, 'BY')
   expr = GetExpression(tokens, {})
   return command.Filter(line, table, target, expr)
 
 def GetEmpty(tokens, line):
   ForcePop(tokens, WORD, 'AS')
-  target = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  target = GetExpression(tokens, UNQUOTED_STRING)
   return command.Empty(line, target)
 
 def GetUnion(tokens, line):
-  sources = [GetExpression(tokens, {WORDS_AS_CONSTANTS: True})]
+  sources = [GetExpression(tokens, UNQUOTED_STRING)]
   while TryPop(tokens, SYMBOL, ','):
-    sources.append(GetExpression(tokens, {WORDS_AS_CONSTANTS: True}))
+    sources.append(GetExpression(tokens, UNQUOTED_STRING))
   ForcePop(tokens, WORD, 'TO')
-  target = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  target = GetExpression(tokens, UNQUOTED_STRING)
   schema = 'EQUAL'
   if TryPop(tokens, WORD, 'WITH'):
     if TryPop(tokens, WORD, 'EQUAL'):
@@ -481,21 +688,41 @@ def GetUnion(tokens, line):
   return command.Union(line, sources, target, schema)
 
 def GetDrop(tokens, line):
-  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  table = GetExpression(tokens, UNQUOTED_STRING)
   return command.Drop(line, table)
+
+def GetInput(tokens, line):
+  ForcePop(tokens, WORD, 'TABLES')
+  tables = []
+  while True:
+    table = GetExpression(tokens, UNQUOTED_STRING)
+    tables.append(table)
+    if not TryPop(tokens, SYMBOL, ','):
+      break
+  return command.Input(line, tables)
+
+def GetOutput(tokens, line):
+  ForcePop(tokens, WORD, 'TABLES')
+  tables = []
+  while True:
+    table = GetExpression(tokens, UNQUOTED_STRING)
+    tables.append(table)
+    if not TryPop(tokens, SYMBOL, ','):
+      break
+  return command.Output(line, tables)
 
 def GetList(tokens, line):
   ForcePop(tokens, WORD, 'TABLES')
   return command.List(line)
 
 def GetDescribe(tokens, line):
-  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  table = GetExpression(tokens, UNQUOTED_STRING)
   return command.Describe(line, table)
 
 def GetVisualize(tokens, line):
-  table = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  table = GetExpression(tokens, UNQUOTED_STRING)
   base_token = ForcePop(tokens, WORD, 'TO')
-  outfile = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+  outfile = GetExpression(tokens, UNQUOTED_STRING)
   base = None
   colours = None
   idname = expression.Constant('id', base_token)
@@ -509,13 +736,13 @@ def GetVisualize(tokens, line):
       base_token)
   while TryPop(tokens, WORD, 'WITH'):
     if TryPop(tokens, WORD, 'BASE'):
-      base = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      base = GetExpression(tokens, UNQUOTED_STRING)
     elif TryPop(tokens, WORD, 'COLOURS'):
       colours = ForcePop(tokens, QUOTED).value
     elif TryPop(tokens, WORD, 'ID'):
-      idname = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      idname = GetExpression(tokens, UNQUOTED_STRING)
     elif TryPop(tokens, WORD, 'DATA'):
-      dataname = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      dataname = GetExpression(tokens, UNQUOTED_STRING)
     elif TryPop(tokens, WORD, 'LOWER'):
       ForcePop(tokens, WORD, 'BOUND')
       lowerBound = ForcePop(tokens, NUMBER).value
@@ -523,9 +750,9 @@ def GetVisualize(tokens, line):
       ForcePop(tokens, WORD, 'BOUND')
       higherBound = ForcePop(tokens, NUMBER).value
     elif TryPop(tokens, WORD, 'TITLE'):
-      title = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      title = GetExpression(tokens, UNQUOTED_STRING)
     elif TryPop(tokens, WORD, 'HEADER'):
-      header = GetExpression(tokens, {WORDS_AS_CONSTANTS: True})
+      header = GetExpression(tokens, UNQUOTED_STRING)
     elif TryPop(tokens, WORD, 'LEGEND'):
       legend = True
       if TryPop(tokens, WORD, 'NONE'):
@@ -543,8 +770,11 @@ def GetBody(tokens):
     return GetLoadTable(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'DUMP'):
     return GetDumpTable(tokens, t.line)
+  # TODO: Remove IMPORT.
   elif t := TryPop(tokens, WORD, 'IMPORT'):
     return GetImport(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'RUN'):
+    return GetRun(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'TRANSFORM'):
     return GetTransform(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'AGGREGATE'):
@@ -557,6 +787,10 @@ def GetBody(tokens):
     return GetPivot(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'DROP'):
     return GetDrop(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'INPUT'):
+    return GetInput(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'OUTPUT'):
+    return GetOutput(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'VISUALIZE'):
     return GetVisualize(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'LIST'):

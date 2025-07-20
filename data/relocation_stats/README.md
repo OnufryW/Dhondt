@@ -17,7 +17,3 @@ have not been registered to vote anywhere).
 For right to vote, we have only source data here (that is, the fact that
 a voter requested their right-to-vote paper is registered here. The target
 data is listed in the PKW data, and not here.
-
-To obtain an SSV (semicolon-separated values) dump of any of the tables,
-
-python3 ../../python_lib/transform.py ../dump.cfg i $CFG_FILE

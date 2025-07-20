@@ -14,8 +14,11 @@ import visualize
 SEPARATOR = 'separator'
 PREFIX = 'prefix'
 EXTRA_PARAMS = 'extra_params'
-EXTRA_TABLES = 'extra_tables'
+SOURCES = 'sources'
 PARAM_PREFIX = 'param_prefix'
+TARGET_TABLE = 'target_table'
+
+INPUT_TABLES = '__input_table_names'
 
 class Const:
   def __init__(self, value):
@@ -303,6 +306,145 @@ class Sequence:
       res.extend(comm.Eval(tables, params))
     return res
 
+class Run(Command):
+  def __init__(self, line, runnables, random_names, parser):
+    super().__init__(line, 'RUN')
+    self.random_names = random_names
+    self.runnables = []
+    for r in runnables:
+      source_options = {
+         EXTRA_PARAMS: [],
+         SOURCES: [],
+         PARAM_PREFIX: None,
+         TARGET_TABLE: None,
+      }
+      sources = []
+      for source in r['FROM']:
+        sources.append(RunInput(source[2], source, source_options, parser))
+      options = {EXTRA_PARAMS: r['PARAMS'],
+                 SOURCES: sources,
+                 PARAM_PREFIX: r['PARAM_PREFIX'],
+                 TARGET_TABLE: r['INTO']}
+      self.runnables.append(RunInput(r['LINE'], r['INPUT'], options, parser))
+
+  def Eval(self, tables, params):
+    res = []
+    for runnable in self.runnables:
+      res.extend(runnable.Eval(tables, params))
+    for random_name in self.random_names:
+      del tables[random_name]
+    return res
+
+class RunInput(Command):
+  def __init__(self, line, inputdata, options, parser):
+    super().__init__(line, 'RUN input')
+    self.inputtype = inputdata[0]
+    assert self.inputtype in ['FILE', 'COMMAND', 'TABLE']
+    self.input = inputdata[1]
+    self.parser = parser
+    self.prefix = options[PREFIX] if PREFIX in options else None
+    self.extra_params = options[EXTRA_PARAMS]
+    self.sources = options[SOURCES]
+    self.param_prefix = options[PARAM_PREFIX]
+    self.target_table = options[TARGET_TABLE]
+
+  def Eval(self, tables, params):
+    res = []
+    inputdata = self.input.Eval(ParamContext(params))
+    prefix = self.prefix.Eval(ParamContext(params)) if self.prefix else ''
+    param_prefix = self.param_prefix.Eval(ParamContext(params)) if self.param_prefix else ''
+    # Step one: Parse the relevant file.
+    if self.inputtype == 'FILE':
+      try:
+        with open(inputdata, 'r') as config_file:
+          try:
+            child_command = self.parser(config_file.readlines())
+          except Exception as e:
+            self.RaiseFrom('Failure parsing imported file {}'.format(
+                inputdata), e)
+      except OSError as e:
+        self.RaiseFrom('Failed to open file {}'.format(inputdata), e)
+    elif self.inputtype == 'COMMAND':
+      child_command = self.parser([inputdata])
+    elif self.inputtype == 'TABLE':
+      source_table = self.Source(self.input, tables, params)
+    # Step two: prepare the new parameters for the execution.
+    child_params = {}
+    # TODO: consider an option where we're explicitly not passing params in
+    for param in params:
+      # We don't copy input table parameters to the child (we take the ones
+      # explicitly specified in params; we don't want to inherit the ones
+      # that the parent file used).
+      if param.startswith(param_prefix) and param != INPUT_TABLES:
+        child_params[param[len(param_prefix):]] = params[param]
+    for param in self.extra_params:
+      child_params[param] = self.extra_params[param].Eval(
+          ParamContext(params))
+    # Step three: prepare to shift directory
+    if self.inputtype == 'FILE': 
+      rootpath = os.path.dirname(os.path.abspath(inputdata))
+      oldpath = os.getcwd()
+      os.chdir(rootpath)
+    # Step four: prepare child tables.
+    child_tables = {}
+    child_params[INPUT_TABLES] = []
+    for source in self.sources:
+      grandchild_tables = {}
+      if source.inputtype == 'TABLE':
+        for tablename in tables:
+          grandchild_tables[tablename] = tables[tablename]
+      source.Eval(grandchild_tables, params)
+      if len(grandchild_tables) != 1:
+        self.Raise('Source produced {} tables: {}, expected 1'.format(
+            len(grandchild_tables), list(grandchild_tables.keys())))
+      table_name = list(grandchild_tables.keys())[0]
+      if table_name in child_tables:
+        self.Raise('Two FROM sources produced table with the same name' +
+                     table_name)
+      child_tables[table_name] = grandchild_tables[table_name]
+      # We pass the input table names in order under a "magic" param.
+      # We pass the evaluated table names, instead of expressions, because
+      # the set of parameters might be different in the child, and we want
+      # to keep the evaluation from the parent.
+      child_params[INPUT_TABLES].append(table_name)
+    # Step five: actually execute child
+    if self.inputtype in ['FILE', 'COMMAND']:
+      try:
+        res = child_command.Eval(child_tables, child_params)
+      except ValueError as e:
+        if self.inputtype == 'FILE':
+          self.RaiseFrom('Failure in imported file ' + inputdata, e)
+        else:
+          self.RaiseFrom('Failure in running command', e)
+      finally:
+        if self.inputtype == 'FILE':
+          # Step six: roll back the directory shift
+          os.chdir(oldpath)
+    elif self.inputtype == 'TABLE':
+      child_tables = {source_table: tables[source_table]}
+    # Step seven: copy results of child execution into parent tables
+    if self.target_table:
+      target_name = self.target_table.Eval(ParamContext(params))
+      if len(child_tables) != 1:
+        self.Raise('Running with an INTO clause has to produce exactly 1 table, got {}: {}'.format(len(child_tables), list(child_tables.keys())))
+      tables[target_name] = child_tables[list(child_tables.keys())[0]]
+    elif self.inputtype != 'TABLE':
+      for table in child_tables:
+        new_table_name = prefix + table
+        if new_table_name in tables:
+          self.Raise('Cannot import table {}, it already exists'.format(
+              new_table_name))
+        tables[new_table_name] = child_tables[table]
+    else:
+      keys = list(tables.keys())
+      for key in keys:
+        if key != source_table:
+          del tables[key]
+    return res
+
+
+
+
 # A request to execute another file. The parser is passed in, because
 # there's a circular dependency here I need to resolve somehow.
 class Import(Command):
@@ -310,15 +452,16 @@ class Import(Command):
     super().__init__(line, 'IMPORT')
     self.path = path
     self.parser = parser
-    self.prefix = options[PREFIX]
+    self.prefix = options[PREFIX] if PREFIX in options else None
     self.extra_params = options[EXTRA_PARAMS]
     self.extra_tables = options[EXTRA_TABLES]
     self.param_prefix = options[PARAM_PREFIX]
+    self.target_table = options[TARGET_TABLE]
 
   def Eval(self, tables, params):
     res = []
     path = self.path.Eval(ParamContext(params))
-    prefix = self.prefix.Eval(ParamContext(params))
+    prefix = self.prefix.Eval(ParamContext(params)) if self.prefix else ''
     param_prefix = self.param_prefix.Eval(ParamContext(params))
     # Step one: Parse the relevant file.
     try:
@@ -333,7 +476,10 @@ class Import(Command):
     child_params = {}
     # TODO: consider an option where we're explicitly not passing params in
     for param in params:
-      if param.startswith(param_prefix):
+      # We don't copy input table parameters to the child (we take the ones
+      # explicitly specified in params; we don't want to inherit the ones
+      # that the parent file used).
+      if param.startswith(param_prefix) and param != INPUT_TABLES:
         child_params[param[len(param_prefix):]] = params[param]
     for param in self.extra_params:
       child_params[param] = self.extra_params[param].Eval(
@@ -344,9 +490,15 @@ class Import(Command):
     os.chdir(rootpath)
     # Step four: prepare child tables.
     child_tables = {}
+    child_params[INPUT_TABLES] = []
     for table in self.extra_tables:
       table_name = self.Source(table, tables, params)
       child_tables[table_name] = tables[table_name]
+      # We pass the input table names in order under a "magic" param.
+      # We pass the evaluated table names, instead of expressions, because
+      # the set of parameters might be different in the child, and we want
+      # to keep the evaluation from the parent.
+      child_params[INPUT_TABLES].append(table_name)
     # Step five: actually execute child
     try:
       res = child_command.Eval(child_tables, child_params)
@@ -356,12 +508,18 @@ class Import(Command):
       # Step six: roll back the directory shift
       os.chdir(oldpath)
     # Step seven: copy results of child execution into parent tables
-    for table in child_tables:
-      new_table_name = prefix + table
-      if new_table_name in tables:
-        self.Raise('Cannot import table {}, it already exists'.format(
-            new_table_name))
-      tables[new_table_name] = child_tables[table]
+    if self.target_table:
+      target_name = self.target_table.Eval(ParamContext(params))
+      if len(child_tables) != 1:
+        self.Raise('Running with an INTO clause has to produce exactly 1 table, got {}: {}'.format(len(child_tables), list(child_tables.keys())))
+      tables[target_name] = child_tables[list(child_tables.keys())[0]]
+    else:
+      for table in child_tables:
+        new_table_name = prefix + table
+        if new_table_name in tables:
+          self.Raise('Cannot import table {}, it already exists'.format(
+              new_table_name))
+        tables[new_table_name] = child_tables[table]
     return res
 
 class SingleExpression:
@@ -414,7 +572,7 @@ class RangeExpression:
       except Exception as e:
         msg = 'Failure evaluating {} (column {} in range {}-{}) for row {}'
         raise ValueError(msg.format(header_rev[x], x+1, self.beg+1,
-                                    self.end+1, input_row)) from e
+                                    self.end+1, input_row) + str(e)) from e
       del context['?']
 
 class Filter(Command):
@@ -474,7 +632,7 @@ class Transform(Command):
 
 class Aggregate(Command):
   def __init__(self, line, source_table, target_table, group_list, expr_list):
-    super().__init__(line, 'TRANSFORM')
+    super().__init__(line, 'AGGREGATE')
     self.source_table = source_table
     self.target_table = target_table
     self.group_list = group_list
@@ -638,6 +796,45 @@ class Drop(Command):
   def Eval(self, tables, params):
     target = self.Source(self.table, tables, params)
     del tables[target]
+    return []
+
+class Output(Command):
+  def __init__(self, line, tables):
+    super().__init__(line, 'OUTPUT TABLES')
+    self.tables = tables
+
+  def Eval(self, tables, params):
+    output_tables = []
+    for table in self.tables:
+      output_tables.append(self.Source(table, tables, params))
+    to_remove = []
+    for table in tables:
+      if table not in output_tables:
+        to_remove.append(table)
+    for table in to_remove:
+      del tables[table]
+    return []
+
+class Input(Command):
+  def __init__(self, line, tables):
+    super().__init__(line, 'INPUT TABLES')
+    self.tables = tables
+
+  def Eval(self, tables, params):
+    if params[INPUT_TABLES]:
+      if len(self.tables) != len(params[INPUT_TABLES]):
+        self.Raise(
+          'INPUT TABLES specifies {} tables, but caller provided {}'.format(
+            len(self.tables), num_param_tables))
+      temp_tables = {}
+      for old_name, new_name_expr in zip(params[INPUT_TABLES], self.tables):
+        new_name = new_name_expr.Eval(ParamContext(params))
+        temp_tables[new_name] = tables[old_name]
+        del tables[old_name]
+      for table_name in temp_tables:
+        tables[table_name] = temp_tables[table_name]
+    for t in self.tables:
+      self.Source(t, tables, params)
     return []
 
 class Pivot(Command):

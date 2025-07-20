@@ -11,30 +11,21 @@ import traceback
 def usage():
   print('Usage:')
   print('"python3 cadmium.py" runs the interactive interpreter')
-  print('"python3 cadmium.py CONFIGFILE_PATH [PARAM_NAME PARAM_VALUE]" executes a config filie')
+  print('"python3 cadmium.py COMMAND" runs a Cadmium command')
   sys.exit(1)
-
-if len(sys.argv) > 1 and len(sys.argv) % 2:
-  usage()
 
 if len(sys.argv) > 1:
   try:
-    with open(sys.argv[1], 'r') as configfile:
-      print('Parsing command file: ', sys.argv[1])
-      comm = sql.GetCommandList(configfile.readlines())
+    command = ' '.join(sys.argv[1:]) 
+    comm = sql.GetCommandList([command])
   except Exception as e:
     print(str(e))
+    raise e
     sys.exit(1)
   print('Parsed successfully, running')
   print()
-  params = {}
-  for i in range(2, len(sys.argv), 2):
-    params[sys.argv[i]] = sys.argv[i+1]
-  rootpath = os.path.dirname(os.path.abspath(sys.argv[1]))
-  oldpath = os.path.abspath(os.getcwd())
-  os.chdir(rootpath)
   try:
-    for l in comm.Eval({}, params):
+    for l in comm.Eval({}, {}):
       print(l)
   except Exception as e:
     print(str(e))
@@ -43,8 +34,6 @@ if len(sys.argv) > 1:
       for l in traceback.format_list(traceback.extract_tb(e.__traceback__)):
         print(l)
     sys.exit(1)
-  finally:
-    os.chdir(oldpath)
   print()
   print('Run ended with success')
 else:
