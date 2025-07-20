@@ -171,8 +171,12 @@ TERC;Electoral District ID;What this covers
 1432;20;warszawski zachodni
 1434;20;wołomiński
 1465;19;Warszawa
+01465;19;Warszawa
 149801;19;statki Warszawa
+0149801;19;statki Warszawa
+0000000;19;zagranica
 1499;19;zagranica
+01499;19;zagranica
 16;21;województwo opolskie
 1801;22;bieszczadzki
 1802;22;brzozowski
@@ -210,6 +214,7 @@ TERC;Electoral District ID;What this covers
 2216;25;sztumski
 2214;25;tczewski
 229901;25;statki Gdańsk
+0229801;25;statki Gdańsk
 2201;26;bytowski
 2202;26;chojnicki
 2203;26;człuchowski

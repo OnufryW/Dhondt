@@ -5,7 +5,8 @@ def ValidateCanonicalResults(results):
   assert not duplicates
 
 def PrintToSsv(results, keys, parties, filename):
-  parties = list(parties)
+  # Sorting to make it stable across runs.
+  parties = sorted(list(parties))
   with open(filename, mode='w') as f:
     f.write(';'.join(keys + parties) + '\n')
     for row in results:

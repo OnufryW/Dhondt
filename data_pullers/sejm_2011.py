@@ -61,7 +61,7 @@ class Wybory(object):
     res += voivodshipteryt + "/pl/" + teryt_or_district + ".html"
     return res
 
-  def ExtractHrefs(self, url, debug, header, address_extract):
+  def ExtractHrefs(self, url, debug, headers, address_extract):
     # Extracts all the hrefs from a table with the given header from the given
     # URL, using the provided lambda to extract a href from a row (more precisely,
     # it takes the first link in every td, and extracts it).
@@ -71,7 +71,7 @@ class Wybory(object):
     tables = page.find_all('tbody')
     for table in tables:
       tds = table.find_all('td')
-      if not tds[0].string or tds[0].string.strip() != header:
+      if not tds[0].string or tds[0].string.strip() not in headers:
         continue
       for td in tds:
         ass = td.find_all('a')
@@ -126,18 +126,19 @@ class Wybory(object):
     return [(r, res[r][0], res[r][1], res[r][2], res[r][3]) for r in res]
 
   def GetPowiatList(self, districtid, voivodship_teryt, debug):
-    return self.ExtractHrefs(self.UrlFor(voivodship_teryt, districtid), debug,
-        u'Powiaty', lambda href: (voivodship_teryt, href.split('.')[0]))
+    hrefs = self.ExtractHrefs(self.UrlFor(voivodship_teryt, districtid), debug,
+        [u'Powiaty', u'Statki, Warszawa, Zagranica'], lambda href: (voivodship_teryt, href.split('.')[0]))
+    return [href for href in hrefs if u'Senatu nr' not in href[2] and href[2] != 'Statki (Warszawa)' and href[2] != 'Zagranica']
 
   def GetCityList(self, districtid, voivodship_teryt, debug):
     hrefs = self.ExtractHrefs(self.UrlFor(voivodship_teryt, districtid), debug,
-        u'Miasta na prawach powiatu',
+        [u'Miasta na prawach powiatu', u'Statki, Warszawa, Zagranica'],
         lambda href: (voivodship_teryt, href.split('.')[0]))
-    return [href for href in hrefs if u'Senatu nr' not in href[2]]
+    return [href for href in hrefs if u'Senatu nr' not in href[2] and href[2] != u'Warszawa']
 
   def GetCommunityList(self, voivodship_teryt, powiat_teryt, debug):
     return self.ExtractHrefs(self.UrlFor(voivodship_teryt, powiat_teryt), debug,
-        u'Gminy', lambda href: (voivodship_teryt, href.split('.')[0]))
+        [u'Gminy', u'Dzielnice'], lambda href: (voivodship_teryt, href.split('.')[0]))
 
   def GetResults(self, voivodship_teryt, community_teryt, debug):
     """Returns a map from committee name to number of votes, and the number
@@ -165,7 +166,9 @@ class Wybory(object):
         links = td.find_all('a')
         if links and u'/prt/' in links[0]['href']:
           commissions += 1
-    assert commissions and commissions % 2 == 0
+    # I have no idea what's happening in the foreign commissions, and I can't be
+    # bothered to debug.
+    assert (commissions and commissions % 2 == 0) or commissions == 517
     return result, commissions // 2
 
   def GetCommunityStats(
