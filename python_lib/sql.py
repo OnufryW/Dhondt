@@ -447,11 +447,13 @@ def GetRunSource(tokens):
 def GetRun(tokens, line):
   runnables = []
   random_names = []
+  storedtoken = tokens[0]
   while True:
+    storedtoken = tokens[0]
     source = GetRunSource(tokens)
     runnable = {'INPUT': source, 'FROM': [], 'INTO': None, 'PARAMS': {},
-                'PARAM_PREFIX': expression.Constant('', tokens[0]),
-                'LINE': tokens[0].line}
+                'PARAM_PREFIX': expression.Constant('', storedtoken),
+                'LINE': storedtoken.line}
     param_prefix_set = False
     while True:
       if token := TryPop(tokens, WORD, 'FROM'):
@@ -485,6 +487,7 @@ def GetRun(tokens, line):
           runnable['PARAM_PREFIX'] = GetExpression(tokens, UNQUOTED_STRING)
         else:
           FailedPop(tokens, ['Invalid optional argument to RUN'])
+        continue
       break
     if runnables:
       random_name = '__input_table_' + ''.join([
@@ -495,9 +498,9 @@ def GetRun(tokens, line):
       if runnable['FROM']:
         FailedPop(tokens,
             'Only the first entry in a RUN stream can have a FROM clause')
-      runnables[-1]['INTO'] = expression.Constant(random_name, tokens[0])
+      runnables[-1]['INTO'] = expression.Constant(random_name, storedtoken)
       runnable['FROM'].append(
-          ('TABLE', expression.Constant(random_name, tokens[0]),
+          ('TABLE', expression.Constant(random_name, storedtoken),
            runnable['LINE']))
       random_names.append(random_name)
     runnables.append(runnable)

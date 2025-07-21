@@ -83,7 +83,7 @@ class Command:
     source_table = self.Source(source, tables, params)
     if target is not None:
       target_table = target.Eval(ParamContext(params))
-      if target_table in tables:
+      if target_table in tables and target_table != source_table:
         self.Raise('Target table {} already present in tables!'.format(
             target_table))
     else:
@@ -740,7 +740,7 @@ class Join(Command):
     right_table = self.Source(self.right_table, tables, params)
     right_header, right_rows = tables[right_table]
     target_table = self.target_table.Eval(ParamContext(params))
-    if target_table in tables:
+    if target_table in tables and target_table not in [left_table, right_table]:
       self.Raise('Cannot create table {}, it already exists'.format(
           target_table))
     header = {}
