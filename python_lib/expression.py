@@ -163,20 +163,74 @@ class RangeExpr(Expression):
                          'at pos', col) from e
     return val
 
-# Note: This isn't super-efficient, as we do the whole d'Hondt calculation
-# for each party over and over again; instead of doing it once. However,
-# I expect O(10) parties and O(40) districts, so it should be fine.
-class DhondtExpr(Expression):
-  def __init__(self, seats, myvotes, beg, end, token):
-    super().__init__(token, 'dhondt')
+# This is a generic class for seat-assignment expressions. They take a
+# numeric expression that tells how many seats we should assign, and then
+# a column index telling me which column contains our vote count, and a
+# range which says where are votes in general contained.
+# The expression returns an integer, the number of votes assigned. It should
+# be guaranteed that running the same type of seat assignment across all the
+# columns in the beg-end range will in total assign the total number of
+# seats provided.
+# Each specialization should provide a Calc method, which does the actual
+# calculation. The Calc method takes my number of votes, a tiebreaker
+# index (for me, for other votes the position in the list is used), the
+# list of other vote values, and the total number of seats, and should
+# return an integer - the number of seats assigned.
+class SeatAssignmentExpr(Expression):
+  def __init__(self, seats, myvotes, beg, end, token, name):
+    super().__init__(token, name)
     self.seats = seats
     self.myvotes = myvotes
     self.beg = beg
     self.end = end
 
+  def Eval(self, context):
+    beg = self.beg.Eval(context) - 1
+    end = self.end.Eval(context) - 1
+    if end < 0:
+      end = context['?last']
+    my_index = self.myvotes.Eval(context) - 1
+    if my_index < beg or my_index >= end:
+      raise ValueError(self.ErrorStr(),
+        ('Second argument of {} {} should be in the range [{},{}) ' +
+         'specified by the third').format(self.descr, my_index, beg, end))
+    other_votes = [context['__data'][col]
+                   for col in range(beg, end) if col != my_index]
+    my_votes = context['__data'][my_index]
+    seats = self.seats.Eval(context)
+    return self.Calc(my_votes, my_index-beg-0.5, other_votes, seats)
+
+# This is the Hare-Niemeyer, or "largest remainder" method of seat
+# assignment.
+class NiemeyerExpr(SeatAssignmentExpr):
+  def __init__(self, seats, myvotes, beg, end, token):
+    super().__init__(seats, myvotes, beg, end, token, 'niemeyer')
+
   def Calc(self, my_votes, index, other_votes, seats):
-    # 'index' should be the my index amongst the other votes, and should
-    # be a fractional number.
+    total_votes = my_votes + sum(other_votes)
+    def ideal(x):
+      return (x * seats) / total_votes
+    def rem(x):
+      return x - int(x)
+
+    my_seats = int(ideal(my_votes))
+    assigned_seats = my_seats + sum([int(ideal(v)) for v in other_votes])
+    rems = [(-rem(ideal(v)), i) for i, v in enumerate(other_votes)]
+    rems.append((-rem(ideal(my_votes)), index))
+    rems.sort()
+    for i in range(seats - assigned_seats):
+      if rems[i][1] == index:
+        my_seats += 1
+    return my_seats
+
+# Note: This isn't super-efficient, as we do the whole d'Hondt calculation
+# for each party over and over again; instead of doing it once. However,
+# I expect O(10) parties and O(40) districts, so it should be fine.
+class DhondtExpr(SeatAssignmentExpr):
+  def __init__(self, seats, myvotes, beg, end, token):
+    super().__init__(seats, myvotes, beg, end, token, 'dhondt')
+
+  def Calc(self, my_votes, index, other_votes, seats):
     division_level = {index: (my_votes, 1)}
     candidates = []
     heapq.heappush(candidates, (-my_votes, index))
@@ -192,22 +246,6 @@ class DhondtExpr(Expression):
       if ind == index:
         res += 1
     return res
-
-  def Eval(self, context):
-    beg = self.beg.Eval(context) - 1
-    end = self.end.Eval(context) - 1
-    if end < 0:
-      end = context['?last']
-    my_index = self.myvotes.Eval(context) - 1
-    if my_index < beg or my_index >= end:
-      raise ValueError(self.ErrorStr(),
-        ('Second argument of dhondt {} should be in the range [{},{}) ' +
-         'specified by the third').format(my_index, beg, end))
-    other_votes = [context['__data'][col]
-                   for col in range(beg, end) if col != my_index]
-    my_votes = context['__data'][my_index]
-    seats = self.seats.Eval(context)
-    return self.Calc(my_votes, my_index-beg-0.5, other_votes, seats)
 
 class NumColumnsExpr(Expression):
   def __init__(self, token):

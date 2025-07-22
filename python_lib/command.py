@@ -269,6 +269,21 @@ class Dump(Command):
         self.WriteLines(header, rows, outf)
       return []
 
+class Print(Command):
+  def __init__(self, line, expr, path):
+    super().__init__(line, 'PRINT')
+    self.expr = expr
+    self.path = path
+
+  def Eval(self, tables, params):
+    expr = self.expr.Eval(ParamContext(params))
+    path = self.path.Eval(ParamContext(params))
+    if path == 'stdout':
+      return [expr + '\n']
+    with open(path, 'x') as outf:
+      outf.write(expr + '\n')
+    return []
+
 class List(Command):
   def __init__(self, line):
     super().__init__(line, "LIST TABLES")
@@ -441,9 +456,6 @@ class RunInput(Command):
         if key != source_table:
           del tables[key]
     return res
-
-
-
 
 # A request to execute another file. The parser is passed in, because
 # there's a circular dependency here I need to resolve somehow.

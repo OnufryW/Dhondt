@@ -98,7 +98,7 @@ def CalcType3(intypes1, argtypes1, intypes2, argtypes2, intypes3,
       [intypes1, intypes2, intypes3], [argtypes1, argtypes2, argtypes3], f)
 
 SPECIAL_FUNCTIONS = {
-  'dhondt', 'at', 'index', 'name', 'curr', 'currname', 'numcolumns'
+  'niemeyer', 'dhondt', 'at', 'index', 'name', 'curr', 'currname', 'numcolumns'
 }
 FUNCTION_NAMES = list(UNARY_FUNCTIONS.keys()) + list(BINARY_FUNCTIONS.keys()) + list(TERNARY_FUNCTIONS.keys()) + list(RANGE_FUNCTIONS.keys()) + list(AGGREGATE_FUNCTIONS.keys()) + list(SPECIAL_FUNCTIONS)
 KEYWORDS = FUNCTION_NAMES + [
@@ -220,15 +220,21 @@ def GetFactor(tokens, settings):
         f = RANGE_FUNCTIONS[token.value]
         return (expression.RangeExpr(
                     beg, end, (f[0], f[1]), token, token.value), f[3])
-      elif token.value == 'dhondt':
+      elif token.value in ['dhondt', 'niemeyer']:
+        exprtype = token.value
         seats = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
         votes = GetExpression(tokens, settings)
         ForcePop(tokens, SYMBOL, ',')
         beg, end = GetRange(tokens, settings)
         ForcePop(tokens, SYMBOL, ')')
-        return (expression.DhondtExpr(seats, votes, beg, end, token), 
-                [INT])
+        if exprtype == 'dhondt':
+          return (expression.DhondtExpr(seats, votes, beg, end, token), 
+                  [INT])
+        else:
+          assert (exprtype == 'niemeyer')
+          return (expression.NiemeyerExpr(seats, votes, beg, end, token),
+                  [INT])
       elif token.value == 'curr':
         ForcePop(tokens, SYMBOL, ')')
         return (expression.CurrExpr(token), ANY)
@@ -435,6 +441,15 @@ def GetDumpTable(tokens, line):
     path = expression.Constant('stdout', tokens[0])
   return command.Dump(line, name, path)
 
+def GetPrint(tokens, line):
+  expr = GetExpression(tokens, UNQUOTED_STRING)
+  if TryPop(tokens, WORD, 'TO'):
+    path = GetExpression(tokens, UNQUOTED_STRING)
+  else:
+    path = expression.Constant('stdout', tokens[0])
+  return command.Print(line, expr, path)
+
+
 def GetRunSource(tokens):
   line = tokens[0].line
   if TryPop(tokens, WORD, 'FILE'):
@@ -473,7 +488,7 @@ def GetRun(tokens, line):
         continue
       elif token := TryPop(tokens, WORD, 'WITH'):
         if token := TryPop(tokens, WORD, 'PARAM'):
-          key = ForcePop(tokens, WORD)
+          key = ForcePop(tokens, WORD).value
           if key in runnable['PARAMS']:
             FailedPop(tokens,
                 'Parameter {} defined twice in RUN clause'.format(key))
@@ -773,6 +788,8 @@ def GetBody(tokens):
     return GetLoadTable(tokens, t.line)
   elif t := TryPop(tokens, WORD, 'DUMP'):
     return GetDumpTable(tokens, t.line)
+  elif t := TryPop(tokens, WORD, 'PRINT'):
+    return GetPrint(tokens, t.line)
   # TODO: Remove IMPORT.
   elif t := TryPop(tokens, WORD, 'IMPORT'):
     return GetImport(tokens, t.line)
