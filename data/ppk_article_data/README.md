@@ -4,8 +4,7 @@ This calculates a bunch of inequality of vote strength metrics; based on the
 definitions provided [here](https://czasopisma.marszalek.com.pl/images/pliki/ppk/75/ppk7515.pdf?fbclid=IwY2xjawG65-BleHRuA2FlbQIxMAABHeUwh25WdZ4bmjfdLrN8Ix8JxRyPXe5jLDThvBzu2UMirqFIrK7UJnelUQ_aem_uyeDftRVeQnN_TkRJoRGfA).
 
 Seat allocation methods P0 to P6 are defined in the article. In short, they're all
-running a seat allocation method (the article uses smallest remainder, while my
-calculations right now use D'Hondt, because that's what I have implemented), based
+running a seat allocation method (smallest remainder, which is what our electoral system uses), based
 on various numerical parameters for the districts. Namely:
  - P0 is the current allocation, based on the CRW data about number of
    inhabitants from 2011.
